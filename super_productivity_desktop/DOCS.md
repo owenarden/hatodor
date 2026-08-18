@@ -1,5 +1,10 @@
 # Super Productivity Desktop — HAOS App
 
+## Version 0.5 runtime fix
+
+Version 0.5 installs Ubuntu `libgbm1` because the Super Productivity Electron binary directly requires `libgbm.so.1`. It also performs an `ldd` check during the image build and uses software rendering in the virtual X/VNC session.
+
+
 ## Version 0.4 install fix
 
 The jlesage base image deliberately maps `/var/log` to `/config/log`. Ubuntu's `systemd` package post-install script expects `/var/log` to be a normal directory when it is configured as a dependency of the Super Productivity DEB. Version 0.4 temporarily restores a real `/var/log` during the apt transaction and reinstates the jlesage symlink afterward.

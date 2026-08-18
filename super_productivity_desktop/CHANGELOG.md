@@ -1,15 +1,15 @@
 # Changelog
 
+## 0.5.0
+
+- Install Ubuntu `libgbm1`, which provides `libgbm.so.1` required by the
+  Super Productivity Electron binary at startup.
+- Add a build-time `ldd` check so unresolved ELF shared libraries cause an
+  explicit image-build failure instead of a runtime crash.
+- Start Electron with `--disable-gpu` for predictable software rendering in
+  the virtual X/VNC environment.
+
 ## 0.4.0
 
 - Work around Ubuntu `systemd` package configuration inside
-  `jlesage/baseimage-gui`.
-- Temporarily replace the base image's `/var/log -> /config/log` symlink with
-  a real directory while apt installs Super Productivity and dependencies.
-- Restore `/var/log -> /config/log` immediately after package installation.
-- Set a noninteractive apt frontend and `C.UTF-8` locale for cleaner builds.
-
-## 0.3.0
-
-- Add required Home Assistant image labels for Supervisor local builds.
-- Use the official stable/latest Super Productivity amd64 DEB URL.
+  `jlesage/baseimage-gui` by temporarily making `/var/log` a real directory.
