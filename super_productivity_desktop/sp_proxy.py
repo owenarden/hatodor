@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""
-Proxy Home Assistant to Super Productivity's loopback-only Local REST API.
-
-Super Productivity 18.19+ requires a Bearer token for API requests other than
-GET /health.  The current ha-super-productivity integration does not send that
-header, so this proxy injects the token configured in the HA App options.
-"""
+"""Proxy HA to Super Productivity's loopback-only Local REST API."""
 
 import asyncio
 import json
@@ -20,8 +14,6 @@ MAX_BODY = 2 * 1024 * 1024
 
 
 def load_access_token():
-    # /config/options.json is expected when the App's persistent data mapping
-    # is remapped to /config. /data/options.json is retained as a fallback.
     for path in (Path("/config/options.json"), Path("/data/options.json")):
         try:
             data = json.loads(path.read_text())
@@ -57,12 +49,9 @@ async def read_request(reader):
         rewritten.append(line)
 
     if ACCESS_TOKEN and not saw_authorization:
-        # Insert before the final blank line produced by the header terminator.
-        insert_at = max(0, len(rewritten) - 2)
-        rewritten.insert(
-            insert_at,
-            f"Authorization: Bearer {ACCESS_TOKEN}".encode(),
-        )
+        # Insert just before the final empty line that terminates the headers.
+        rewritten.insert(max(0, len(rewritten) - 2),
+                         f"Authorization: Bearer {ACCESS_TOKEN}".encode())
 
     if content_length > MAX_BODY:
         raise ValueError("request body too large")
@@ -90,7 +79,6 @@ async def handle_client(reader, writer):
                 break
             writer.write(chunk)
             await writer.drain()
-
     except (asyncio.IncompleteReadError, asyncio.LimitOverrunError):
         pass
     except Exception as exc:
@@ -121,15 +109,16 @@ async def handle_client(reader, writer):
 
 
 async def main():
-    auth_state = "configured" if ACCESS_TOKEN else "NOT configured"
     print(
         f"SP REST proxy listening on {LISTEN_HOST}:{LISTEN_PORT}; "
-        f"forwarding to {TARGET_HOST}:{TARGET_PORT}; access token {auth_state}",
+        f"forwarding to {TARGET_HOST}:{TARGET_PORT}; "
+        f"access token {'configured' if ACCESS_TOKEN else 'not configured'}",
         flush=True,
     )
-    async with await asyncio.start_server(
+    server = await asyncio.start_server(
         handle_client, LISTEN_HOST, LISTEN_PORT, limit=MAX_HEADER
-    ) as server:
+    )
+    async with server:
         await server.serve_forever()
 
 
