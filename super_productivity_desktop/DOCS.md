@@ -1,5 +1,10 @@
 # Super Productivity Desktop — HAOS App
 
+## Version 0.4 install fix
+
+The jlesage base image deliberately maps `/var/log` to `/config/log`. Ubuntu's `systemd` package post-install script expects `/var/log` to be a normal directory when it is configured as a dependency of the Super Productivity DEB. Version 0.4 temporarily restores a real `/var/log` during the apt transaction and reinstates the jlesage symlink afterward.
+
+
 ## Version 0.3 install fixes
 
 This revision fixes two install-time problems in the earlier experimental build:
