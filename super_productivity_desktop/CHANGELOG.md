@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+
+- Install Ubuntu `libasound2t64`, which provides `libasound.so.2` required by Electron at runtime.
+- Extend GitHub Actions from a build-only check to a container startup smoke test.
+- Require the built container to remain running and the noVNC HTTP endpoint on port 5800 to become reachable.
+- Dump container logs automatically when the smoke test fails.
+
 ## 0.5.0
 
 - Install Ubuntu `libgbm1`, which provides `libgbm.so.1` required by the

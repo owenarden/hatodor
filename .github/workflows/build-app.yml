@@ -1,4 +1,4 @@
-name: Build HAOS App
+name: Build and Smoke Test HAOS App
 
 on:
   push:
@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-and-smoke-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -43,8 +43,51 @@ jobs:
           file: ./super_productivity_desktop/Dockerfile
           platforms: linux/amd64
           push: false
+          load: true
+          tags: haos-super-productivity:test
           build-args: |
             BUILD_VERSION=${{ steps.version.outputs.version }}
             BUILD_ARCH=amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Start container and verify GUI endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d \
+            --name sp-smoke \
+            -p 5800:5800 \
+            -p 3877:3877 \
+            haos-super-productivity:test
+
+          for attempt in $(seq 1 30); do
+            running="$(docker inspect -f '{{.State.Running}}' sp-smoke 2>/dev/null || true)"
+            if [ "$running" != "true" ]; then
+              echo "Container exited during startup"
+              docker logs sp-smoke || true
+              exit 1
+            fi
+
+            if curl -fsS http://127.0.0.1:5800/ >/dev/null; then
+              echo "noVNC endpoint is reachable"
+              sleep 5
+              test "$(docker inspect -f '{{.State.Running}}' sp-smoke)" = "true"
+              curl -fsS http://127.0.0.1:5800/ >/dev/null
+              echo "Container startup smoke test passed"
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          echo "Timed out waiting for noVNC endpoint"
+          docker logs sp-smoke || true
+          exit 1
+
+      - name: Show container logs
+        if: always()
+        shell: bash
+        run: |
+          docker logs sp-smoke 2>&1 || true
+          docker rm -f sp-smoke >/dev/null 2>&1 || true
