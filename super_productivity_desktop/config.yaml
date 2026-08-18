@@ -1,0 +1,29 @@
+name: "Super Productivity Desktop"
+version: "0.2.0"
+slug: "super_productivity_desktop"
+description: >-
+  Runs the Super Productivity Electron desktop app headlessly and exposes its
+  authenticated Local REST API for the Home Assistant Super Productivity integration.
+arch:
+  - amd64
+startup: application
+boot: auto
+init: false
+legacy: true
+stage: experimental
+backup: cold
+ports:
+  5800/tcp: 5800
+  3877/tcp: 3877
+ports_description:
+  5800/tcp: "Super Productivity desktop Web UI (noVNC)"
+  3877/tcp: "Authenticated proxy to Super Productivity Local REST API"
+webui: "http://[HOST]:[PORT:5800]"
+watchdog: "tcp://[HOST]:[PORT:5800]"
+map:
+  - type: data
+    read_only: false
+    path: /config
+options: {}
+schema:
+  sp_access_token: password?
