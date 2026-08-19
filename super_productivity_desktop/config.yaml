@@ -1,5 +1,5 @@
 name: "Super Productivity Desktop"
-version: "0.6.0"
+version: "0.6.1"
 slug: "super_productivity_desktop"
 description: >-
   Runs the Super Productivity Electron desktop app headlessly and exposes its
@@ -30,4 +30,4 @@ map:
 
 options: {}
 schema:
-  sp_access_token: "password?"
+  sp_access_token: "str?"

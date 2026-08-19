@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- Treat `sp_access_token` as a string rather than a password-schema field.
+- Avoid Supervisor's Have I Been Pwned password validation for this generated API token, allowing App configuration to be saved on offline HAOS systems.
+
 ## 0.6.0
 
 - Install Ubuntu `libasound2t64`, which provides `libasound.so.2` required by Electron at runtime.
