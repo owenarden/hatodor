@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+- Reduce the E1001 left/right selection redraw delay from 500 ms to 150 ms
+  now that partial refresh is enabled, improving button responsiveness while
+  still coalescing very rapid presses.
+
 ## 0.2.3
 
 - Switch the reTerminal E1001 display to ESPHome's `7.50inV2p` partial-refresh
