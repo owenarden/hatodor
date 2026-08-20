@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3
+
+- Switch the reTerminal E1001 display to ESPHome's `7.50inV2p` partial-refresh
+  driver to reduce full-screen flashing during interaction.
+- Perform a full cleaning refresh every 30 display updates to limit ghosting.
+- Increase the left/right button redraw debounce from 150 ms to 500 ms so
+  rapid navigation presses are coalesced into a single e-paper refresh.
+
 ## 0.2.2
 
 - Fix ESPHome compilation with current releases by letting `std::vector`
