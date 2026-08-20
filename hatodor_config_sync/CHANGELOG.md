@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1
+
+- Reduce the E1001 redraw debounce from 150 ms to 30 ms so the panel refresh
+  begins almost immediately after a button press.
+- Replace ASCII `[ ]` / `[x]` markers with drawn circle/check icons that do not
+  depend on font glyph support.
+- Replace the large selected-row outline with a compact chevron marker.
+- Render completed task titles with a lighter Inter weight so they visually
+  recede on the monochrome panel.
+
 ## 0.3.0
 
 - Patch the installed Super Productivity integration so its main project-task
