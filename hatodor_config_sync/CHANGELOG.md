@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+- Switch the dashboard backend from the aggregate Super Productivity Today list
+  to three projects: Morning Routine, Reminders, and Evening Routine.
+- Add configurable daily rollover, morning-end, and evening-start time helpers.
+- Reopen completed Morning/Evening routine tasks at rollover without duplicating
+  incomplete tasks.
+- Keep incomplete Reminders indefinitely and remove completed Reminders only at
+  the next daily rollover.
+- Catch up a missed rollover after Home Assistant restarts.
+
 ## 0.1.0
 
 - Initial one-shot config sync App.
