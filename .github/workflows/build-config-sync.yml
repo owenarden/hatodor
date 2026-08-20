@@ -1,0 +1,66 @@
+name: Build Hatodor Config Sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "hatodor_config_sync/**"
+      - ".github/workflows/build-config-sync.yml"
+  pull_request:
+    paths:
+      - "hatodor_config_sync/**"
+      - ".github/workflows/build-config-sync.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Read app version
+        id: version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version: *"\([^"]*\)"/\1/p' hatodor_config_sync/config.yaml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Config Sync image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./hatodor_config_sync
+          file: ./hatodor_config_sync/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: hatodor-config-sync:test
+          build-args: |
+            BUILD_VERSION=${{ steps.version.outputs.version }}
+            BUILD_ARCH=amd64
+
+      - name: Verify managed files are installed
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(mktemp -d)"
+
+          docker run --rm \
+            -v "$target:/homeassistant" \
+            hatodor-config-sync:test
+
+          cmp \
+            hatodor_config_sync/managed/packages/morning_dashboard.yaml \
+            "$target/packages/morning_dashboard.yaml"
+          cmp \
+            hatodor_config_sync/managed/esphome/reterminal-e1001-morning.yaml \
+            "$target/esphome/reterminal-e1001-morning.yaml"

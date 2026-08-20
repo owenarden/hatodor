@@ -1,0 +1,66 @@
+# Home Assistant package for the reTerminal E1001 morning dashboard.
+#
+# Backend: Super Productivity's Today todo entity.
+# Entity: todo.super_productivity_sp_today
+#
+# This package deliberately contains only the read/update wrapper scripts.
+# Daily reset/recurrence should be managed in Super Productivity rather than
+# resetting every completed task in the aggregate Today list.
+
+script:
+  morning_dashboard_get_items:
+    alias: Morning dashboard - get items
+    description: >
+      Return both incomplete and completed items from the Super Productivity
+      todo entity. This keeps the ESPHome device independent of the backend.
+    mode: parallel
+    sequence:
+      - variables:
+          todo_entity: todo.super_productivity_sp_today
+
+      - action: todo.get_items
+        target:
+          entity_id: "{{ todo_entity }}"
+        data:
+          status:
+            - needs_action
+            - completed
+        response_variable: todo_data
+
+      - variables:
+          dashboard_response:
+            items: "{{ todo_data[todo_entity]['items'] | default([]) }}"
+
+      - stop: Return the morning dashboard checklist
+        response_variable: dashboard_response
+
+  morning_dashboard_set_status:
+    alias: Morning dashboard - set item status
+    description: >
+      Update one item by UID. Super Productivity's HA integration uses the
+      underlying Super Productivity task ID as the todo UID.
+    mode: parallel
+    fields:
+      uid:
+        name: Item UID
+        required: true
+        selector:
+          text:
+      status:
+        name: Status
+        required: true
+        selector:
+          select:
+            options:
+              - needs_action
+              - completed
+    sequence:
+      - variables:
+          todo_entity: todo.super_productivity_sp_today
+
+      - action: todo.update_item
+        target:
+          entity_id: "{{ todo_entity }}"
+        data:
+          item: "{{ uid }}"
+          status: "{{ status }}"
