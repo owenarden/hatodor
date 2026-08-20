@@ -60,6 +60,9 @@ font:
     id: font_item
     size: 27
   - file: "gfonts://Inter@400"
+    id: font_completed
+    size: 27
+  - file: "gfonts://Inter@400"
     id: font_small
     size: 18
 
@@ -174,22 +177,37 @@ display:
         const bool selected_row = (i == selected);
         const bool done = id(checklist_done)[i];
 
+        // A compact chevron marks the selected row without boxing in the text.
         if (selected_row) {
-          // Two-pixel outline makes the current row obvious without
-          // requiring inverted text on the monochrome panel.
-          it.rectangle(20, y, 760, row_height - 4, COLOR_ON);
-          it.rectangle(21, y + 1, 758, row_height - 6, COLOR_ON);
-          it.printf(29, y + 5, id(font_item), ">");
+          it.line(27, y + 10, 35, y + 18, COLOR_ON);
+          it.line(35, y + 18, 27, y + 26, COLOR_ON);
+          it.line(29, y + 10, 37, y + 18, COLOR_ON);
+          it.line(37, y + 18, 29, y + 26, COLOR_ON);
         }
 
-        it.printf(58, y + 5, id(font_item), done ? "[x]" : "[ ]");
+        // Draw checklist icons directly so they do not depend on font glyphs.
+        const int status_x = 62;
+        const int status_y = y + 19;
+        it.circle(status_x, status_y, 10, COLOR_ON);
+        if (done) {
+          it.line(status_x - 5, status_y, status_x - 1, status_y + 4, COLOR_ON);
+          it.line(status_x - 1, status_y + 4, status_x + 6, status_y - 5, COLOR_ON);
+          it.line(status_x - 5, status_y + 1, status_x - 1, status_y + 5, COLOR_ON);
+          it.line(status_x - 1, status_y + 5, status_x + 6, status_y - 4, COLOR_ON);
+        }
 
         std::string title = id(checklist_titles)[i];
-        constexpr size_t max_chars = 38;
+        constexpr size_t max_chars = 43;
         if (title.size() > max_chars) {
           title = title.substr(0, max_chars - 3) + "...";
         }
-        it.printf(130, y + 5, id(font_item), "%s", title.c_str());
+
+        // The panel is 1-bit, so use lighter typography rather than fake gray.
+        if (done) {
+          it.printf(92, y + 5, id(font_completed), "%s", title.c_str());
+        } else {
+          it.printf(92, y + 5, id(font_item), "%s", title.c_str());
+        }
       }
 
       it.line(25, 430, 775, 430, COLOR_ON);
@@ -258,11 +276,12 @@ binary_sensor:
       - script.execute: redraw_display
 
 script:
-  # Coalesce several fast left/right presses into one e-paper refresh.
+  # Keep a tiny debounce so contact bounce/near-simultaneous presses can settle,
+  # but let the e-paper driver's own refresh time dominate perceived latency.
   - id: redraw_display
     mode: restart
     then:
-      - delay: 150ms
+      - delay: 30ms
       - component.update: epaper_display
 
   # Home Assistant is deliberately hidden behind this wrapper script.
