@@ -67,17 +67,14 @@ globals:
   - id: checklist_titles
     type: std::vector<std::string>
     restore_value: no
-    initial_value: '{}'
 
   - id: checklist_uids
     type: std::vector<std::string>
     restore_value: no
-    initial_value: '{}'
 
   - id: checklist_done
     type: std::vector<bool>
     restore_value: no
-    initial_value: '{}'
 
   - id: selected_index
     type: int
