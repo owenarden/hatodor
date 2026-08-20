@@ -213,7 +213,7 @@ display:
       it.line(25, 430, 775, 430, COLOR_ON);
       it.printf(28, 442, id(font_small), "< / > select");
       it.printf(772, 442, id(font_small), TextAlign::TOP_RIGHT,
-                "GREEN = done");
+                "GREEN = toggle");
 
       if (total > max_visible) {
         it.printf(400, 442, id(font_small), TextAlign::TOP_CENTER,
@@ -329,10 +329,19 @@ script:
 
                         new_titles.emplace_back(summary);
                         new_uids.emplace_back(uid);
-                        const bool completed = std::string(status) == "completed";
-                        const bool optimistic =
-                            !id(pending_uid).empty() && id(pending_uid) == uid;
-                        new_done.emplace_back(completed || optimistic);
+
+                        // During a green-button round trip, preserve the local
+                        // optimistic state in either direction (checked or unchecked).
+                        bool shown_done = std::string(status) == "completed";
+                        if (!id(pending_uid).empty() && id(pending_uid) == uid) {
+                          for (size_t j = 0; j < id(checklist_uids).size(); j++) {
+                            if (id(checklist_uids)[j] == id(pending_uid)) {
+                              shown_done = id(checklist_done)[j];
+                              break;
+                            }
+                          }
+                        }
+                        new_done.emplace_back(shown_done);
                       }
 
                       int new_selection = id(selected_index);
@@ -379,21 +388,18 @@ script:
           id(pending_todo_entity).clear();
           const int i = id(selected_index);
           if (i < 0 || i >= (int) id(checklist_uids).size()) return;
+          if (id(active_todo_entity).empty()) return;
 
           #ifndef ESPHOME_LOG_LEVEL_NONE
-          ESP_LOGD("dashboard", "Completing item %d", i);
+          ESP_LOGD("dashboard", "Toggling item %d", i);
           #endif
-
-          // A second press on an already-completed item is intentionally a no-op.
-          if (id(checklist_done)[i]) return;
-          if (id(active_todo_entity).empty()) return;
 
           id(pending_uid) = id(checklist_uids)[i];
           id(pending_todo_entity) = id(active_todo_entity);
 
-          // Give immediate local feedback. The HA/SP round trip happens after
-          // this state change; on_error below rolls it back if the update fails.
-          id(checklist_done)[i] = true;
+          // Toggle locally first for immediate feedback. If HA rejects the
+          // change, on_error below toggles it back to its previous state.
+          id(checklist_done)[i] = !id(checklist_done)[i];
 
       - if:
           condition:
@@ -402,12 +408,20 @@ script:
             - script.execute: redraw_display
             - homeassistant.action:
                 action: script.morning_dashboard_set_status
-                data:
-                  status: completed
                 data_template:
+                  status: "{{ target_status }}"
                   uid: "{{ item_uid }}"
                   todo_entity: "{{ source_todo_entity }}"
                 variables:
+                  target_status: |-
+                    for (size_t i = 0; i < id(checklist_uids).size(); i++) {
+                      if (id(checklist_uids)[i] == id(pending_uid)) {
+                        return id(checklist_done)[i]
+                            ? std::string("completed")
+                            : std::string("needs_action");
+                      }
+                    }
+                    return std::string("needs_action");
                   item_uid: |-
                     return id(pending_uid);
                   source_todo_entity: |-
@@ -426,7 +440,7 @@ script:
                   - lambda: |-
                       for (size_t i = 0; i < id(checklist_uids).size(); i++) {
                         if (id(checklist_uids)[i] == id(pending_uid)) {
-                          id(checklist_done)[i] = false;
+                          id(checklist_done)[i] = !id(checklist_done)[i];
                           break;
                         }
                       }
@@ -435,7 +449,7 @@ script:
                   - script.execute: redraw_display
                   - logger.log:
                       level: WARN
-                      format: "Home Assistant rejected the checklist update; reverted local completion"
+                      format: "Home Assistant rejected the checklist toggle; restored previous state"
 
 interval:
   # Polling keeps remote edits/completions and time-window list changes in sync.
