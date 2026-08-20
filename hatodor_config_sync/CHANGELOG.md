@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Make the reTerminal E1001 header follow the active dashboard list name.
+- Track the source todo entity with the displayed items so completion is applied
+  to the same list even if a time-window boundary is crossed during an update.
+- Rename the ESPHome friendly name from Morning Dashboard to Daily Dashboard.
+
 ## 0.2.0
 
 - Switch the dashboard backend from the aggregate Super Productivity Today list
