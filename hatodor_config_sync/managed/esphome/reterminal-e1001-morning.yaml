@@ -1,6 +1,6 @@
 substitutions:
   device_name: reterminal-e1001-morning
-  friendly_name: Morning Dashboard
+  friendly_name: Daily Dashboard
 
 esphome:
   name: ${device_name}
@@ -89,7 +89,22 @@ globals:
     restore_value: no
     initial_value: 'false'
 
+  - id: active_list_name
+    type: std::string
+    restore_value: no
+    initial_value: '"Dashboard"'
+
+  - id: active_todo_entity
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
   - id: pending_uid
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+  - id: pending_todo_entity
     type: std::string
     restore_value: no
     initial_value: '""'
@@ -129,14 +144,14 @@ display:
         if (done) done_count++;
       }
 
-      it.printf(28, 18, id(font_title), "Morning Routine");
+      it.printf(28, 18, id(font_title), "%s", id(active_list_name).c_str());
       it.printf(772, 27, id(font_small), TextAlign::TOP_RIGHT,
                 "%d/%d done", done_count, total);
       it.line(25, 66, 775, 66, COLOR_ON);
 
       if (total == 0) {
         it.printf(width / 2, 210, id(font_item), TextAlign::TOP_CENTER,
-                  "Waiting for checklist...");
+                  "Nothing on this list");
         it.printf(width / 2, 255, id(font_small), TextAlign::TOP_CENTER,
                   "Home Assistant / Super Productivity");
         return;
@@ -253,7 +268,7 @@ script:
       - component.update: epaper_display
 
   # Home Assistant is deliberately hidden behind this wrapper script.
-  # ESPHome does not know which todo entity or backend supplies the list.
+  # ESPHome receives the active list name/entity but does not know how HA chose it.
   - id: fetch_checklist
     mode: restart
     then:
@@ -272,11 +287,18 @@ script:
                           response["response"]["items"].as<JsonArrayConst>();
 
                       if (items.isNull()) {
-                        ESP_LOGW("morning", "Checklist response did not contain an items array");
+                        ESP_LOGW("dashboard", "Checklist response did not contain an items array");
                         id(checklist_changed) = false;
                         return;
                       }
 
+                      const char *list_name =
+                          response["response"]["list_name"] | "Dashboard";
+                      const char *todo_entity =
+                          response["response"]["todo_entity"] | "";
+
+                      std::string new_list_name(list_name);
+                      std::string new_todo_entity(todo_entity);
                       std::vector<std::string> new_titles;
                       std::vector<std::string> new_uids;
                       std::vector<bool> new_done;
@@ -303,11 +325,15 @@ script:
                       }
 
                       bool changed =
+                          (new_list_name != id(active_list_name)) ||
+                          (new_todo_entity != id(active_todo_entity)) ||
                           (new_titles != id(checklist_titles)) ||
                           (new_uids != id(checklist_uids)) ||
                           (new_done != id(checklist_done)) ||
                           (new_selection != id(selected_index));
 
+                      id(active_list_name) = std::move(new_list_name);
+                      id(active_todo_entity) = std::move(new_todo_entity);
                       id(checklist_titles) = std::move(new_titles);
                       id(checklist_uids) = std::move(new_uids);
                       id(checklist_done) = std::move(new_done);
@@ -323,28 +349,31 @@ script:
                 on_error:
                   - logger.log:
                       level: WARN
-                      format: "Could not fetch the morning checklist from Home Assistant"
+                      format: "Could not fetch the active checklist from Home Assistant"
 
   - id: complete_selected
     mode: single
     then:
       - lambda: |-
           id(pending_uid).clear();
+          id(pending_todo_entity).clear();
           const int i = id(selected_index);
           if (i < 0 || i >= (int) id(checklist_uids).size()) return;
 
           #ifndef ESPHOME_LOG_LEVEL_NONE
-          ESP_LOGD("morning", "Completing item %d", i);
+          ESP_LOGD("dashboard", "Completing item %d", i);
           #endif
 
           // A second press on an already-completed item is intentionally a no-op.
           if (id(checklist_done)[i]) return;
+          if (id(active_todo_entity).empty()) return;
 
           id(pending_uid) = id(checklist_uids)[i];
+          id(pending_todo_entity) = id(active_todo_entity);
 
       - if:
           condition:
-            lambda: 'return !id(pending_uid).empty();'
+            lambda: 'return !id(pending_uid).empty() && !id(pending_todo_entity).empty();'
           then:
             - homeassistant.action:
                 action: script.morning_dashboard_set_status
@@ -352,9 +381,12 @@ script:
                   status: completed
                 data_template:
                   uid: "{{ item_uid }}"
+                  todo_entity: "{{ source_todo_entity }}"
                 variables:
                   item_uid: |-
                     return id(pending_uid);
+                  source_todo_entity: |-
+                    return id(pending_todo_entity);
 
                 on_success:
                   # Optimistically reflect success immediately; then fetch the
@@ -376,8 +408,8 @@ script:
                       format: "Home Assistant rejected the checklist update"
 
 interval:
-  # Polling keeps remote edits/completions in sync. The display is refreshed
-  # only when the returned list actually changed.
+  # Polling keeps remote edits/completions and time-window list changes in sync.
+  # The display is refreshed only when the returned list actually changed.
   - interval: 30s
     then:
       - script.execute: fetch_checklist
