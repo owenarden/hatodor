@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0
+
+- Patch the installed Super Productivity integration so its main project-task
+  fetch uses `include_done=True`, keeping completed project tasks visible to
+  Home Assistant until Hatodor's rollover logic resets or removes them.
+- Make the E1001 green button mark the selected item complete locally before the
+  Home Assistant/Super Productivity round trip, so completion feedback appears
+  immediately instead of waiting on network/backend latency.
+- Preserve the optimistic checkmark during an in-flight refresh and roll it back
+  if Home Assistant rejects the completion update.
+- Keep the 150 ms left/right partial-refresh debounce from 0.2.4.
+- Extend the Config Sync smoke test to verify that the Super Productivity source
+  patch is applied idempotently.
+
 ## 0.2.4
 
 - Reduce the E1001 left/right selection redraw delay from 500 ms to 150 ms
