@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.3
+
+- Replace the green-button GPIO binary sensor with an interrupt-backed pulse
+  counter so repeated presses are counted even while the blocking e-paper
+  driver is refreshing the panel.
+- Use software pulse counting with a 20 ms input filter to preserve multi-press
+  batches while debouncing the mechanical button.
+- Drain every accumulated green press into the existing toggle-and-advance
+  batching logic after the main loop resumes.
+- Delay authoritative reconciliation briefly after the last backend response so
+  button edges captured during a display refresh are applied before polling can
+  overwrite optimistic local state.
+
 ## 0.3.2
 
 - Make the E1001 green button toggle either direction: incomplete to completed
