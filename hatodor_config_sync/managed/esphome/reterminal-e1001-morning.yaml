@@ -110,10 +110,11 @@ display:
   - platform: waveshare_epaper
     id: epaper_display
 
-    # This is Seeed's documented E1001 model setting.
-    # Once the basic build works, see the notes below about 7.50inV2p
-    # if you want to experiment with faster partial refresh.
-    model: 7.50inv2
+    # The E1001 panel supports ESPHome's V2 partial-refresh driver.
+    # Use partial refreshes for normal interaction, with a full cleaning
+    # refresh every 30 display updates to limit ghosting.
+    model: 7.50inV2p
+    full_update_every: 30
 
     cs_pin: GPIO10
     dc_pin: GPIO11
@@ -261,7 +262,7 @@ script:
   - id: redraw_display
     mode: restart
     then:
-      - delay: 150ms
+      - delay: 500ms
       - component.update: epaper_display
 
   # Home Assistant is deliberately hidden behind this wrapper script.
