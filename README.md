@@ -20,9 +20,16 @@ Home Assistant configuration directory:
 - `packages/morning_dashboard.yaml`
 - `esphome/reterminal-e1001-morning.yaml`
 
+It also applies a small idempotent patch to the installed HACS Super
+Productivity integration so project task fetches use `include_done=True`. This
+keeps completed routine/reminder tasks visible to the dashboard until Hatodor's
+rollover logic resets or removes them. A later HACS update can overwrite that
+one-line patch; rerun Config Sync after updating the Super Productivity
+integration.
+
 The source copies live under `hatodor_config_sync/managed/`. They are the source
-of truth; local edits to the deployed copies are overwritten when Config Sync
-runs.
+of truth; local edits to the deployed YAML copies are overwritten when Config
+Sync runs.
 
 For Home Assistant to load the package, perform this bootstrap once in
 `/config/configuration.yaml`:
@@ -35,8 +42,8 @@ homeassistant:
 If a `homeassistant:` block already exists, add the `packages:` entry to that
 block rather than creating a duplicate.
 
-When either managed YAML changes, bump `hatodor_config_sync/config.yaml`'s
+When managed configuration changes, bump `hatodor_config_sync/config.yaml`'s
 version so Home Assistant offers the normal App update. Installing/updating the
-Config Sync App deploys the new files. Package changes then require a Home
-Assistant reload/restart, and ESPHome changes still require an Install/OTA to
-the device.
+Config Sync App deploys the new files and reapplies the integration patch.
+Package or Python integration changes require a Home Assistant restart; ESPHome
+changes still require an Install/OTA to the device.
