@@ -1,26 +1,82 @@
-# Home Assistant package for the reTerminal E1001 morning dashboard.
+# Home Assistant package for the reTerminal E1001 daily dashboard.
 #
-# Backend: Super Productivity's Today todo entity.
-# Entity: todo.super_productivity_sp_today
+# Super Productivity projects:
+#   Morning Routine -> todo.super_productivity_sp_morning_routine
+#   Reminders       -> todo.super_productivity_sp_reminders
+#   Evening Routine -> todo.super_productivity_sp_evening_routine
 #
-# This package deliberately contains only the read/update wrapper scripts.
-# Daily reset/recurrence should be managed in Super Productivity rather than
-# resetting every completed task in the aggregate Today list.
+# Dashboard day:
+#   04:00-10:00  Morning Routine
+#   10:00-18:00  Reminders
+#   18:00-04:00  Evening Routine
+#
+# The three times are Home Assistant helpers and can be adjusted in the UI.
+# Their defaults are set only once so later changes survive restarts.
+
+input_datetime:
+  dashboard_daily_rollover:
+    name: Dashboard daily rollover
+    has_date: false
+    has_time: true
+    icon: mdi:calendar-refresh
+
+  dashboard_morning_end:
+    name: Dashboard morning routine ends
+    has_date: false
+    has_time: true
+    icon: mdi:weather-sunset-up
+
+  dashboard_evening_start:
+    name: Dashboard evening routine starts
+    has_date: false
+    has_time: true
+    icon: mdi:weather-sunset-down
+
+input_boolean:
+  dashboard_times_initialized:
+    name: Dashboard times initialized
+    icon: mdi:check-clock
+
+input_text:
+  dashboard_last_rollover_day:
+    name: Dashboard last rollover day
+    max: 10
 
 script:
   morning_dashboard_get_items:
-    alias: Morning dashboard - get items
-    description: >
-      Return both incomplete and completed items from the Super Productivity
-      todo entity. This keeps the ESPHome device independent of the backend.
+    alias: Dashboard - get active items
+    description: >-
+      Return both incomplete and completed items from the currently active
+      Super Productivity project, together with the source entity and list name.
     mode: parallel
     sequence:
       - variables:
-          todo_entity: todo.super_productivity_sp_today
+          now_time: "{{ now().strftime('%H:%M:%S') }}"
+          rollover_time: "{{ states('input_datetime.dashboard_daily_rollover') }}"
+          morning_end_time: "{{ states('input_datetime.dashboard_morning_end') }}"
+          evening_start_time: "{{ states('input_datetime.dashboard_evening_start') }}"
+
+      - variables:
+          todo_entity: >-
+            {% if now_time < rollover_time or now_time >= evening_start_time %}
+              todo.super_productivity_sp_evening_routine
+            {% elif now_time < morning_end_time %}
+              todo.super_productivity_sp_morning_routine
+            {% else %}
+              todo.super_productivity_sp_reminders
+            {% endif %}
+          list_name: >-
+            {% if now_time < rollover_time or now_time >= evening_start_time %}
+              Evening Routine
+            {% elif now_time < morning_end_time %}
+              Morning Routine
+            {% else %}
+              Reminders
+            {% endif %}
 
       - action: todo.get_items
         target:
-          entity_id: "{{ todo_entity }}"
+          entity_id: "{{ todo_entity | trim }}"
         data:
           status:
             - needs_action
@@ -28,17 +84,20 @@ script:
         response_variable: todo_data
 
       - variables:
+          source_entity: "{{ todo_entity | trim }}"
           dashboard_response:
-            items: "{{ todo_data[todo_entity]['items'] | default([]) }}"
+            list_name: "{{ list_name | trim }}"
+            todo_entity: "{{ source_entity }}"
+            items: "{{ todo_data[source_entity]['items'] | default([]) }}"
 
-      - stop: Return the morning dashboard checklist
+      - stop: Return the active dashboard checklist
         response_variable: dashboard_response
 
   morning_dashboard_set_status:
-    alias: Morning dashboard - set item status
-    description: >
-      Update one item by UID. Super Productivity's HA integration uses the
-      underlying Super Productivity task ID as the todo UID.
+    alias: Dashboard - set item status
+    description: >-
+      Update one item by UID. If todo_entity is provided, use the exact list
+      that supplied the item; otherwise fall back to the currently active list.
     mode: parallel
     fields:
       uid:
@@ -54,13 +113,172 @@ script:
             options:
               - needs_action
               - completed
+      todo_entity:
+        name: Source todo entity
+        required: false
+        selector:
+          text:
     sequence:
       - variables:
-          todo_entity: todo.super_productivity_sp_today
+          now_time: "{{ now().strftime('%H:%M:%S') }}"
+          rollover_time: "{{ states('input_datetime.dashboard_daily_rollover') }}"
+          morning_end_time: "{{ states('input_datetime.dashboard_morning_end') }}"
+          evening_start_time: "{{ states('input_datetime.dashboard_evening_start') }}"
+
+      - variables:
+          active_todo_entity: >-
+            {% if now_time < rollover_time or now_time >= evening_start_time %}
+              todo.super_productivity_sp_evening_routine
+            {% elif now_time < morning_end_time %}
+              todo.super_productivity_sp_morning_routine
+            {% else %}
+              todo.super_productivity_sp_reminders
+            {% endif %}
+          target_todo_entity: "{{ todo_entity | default(active_todo_entity, true) | trim }}"
+
+      - condition: template
+        value_template: >-
+          {{ target_todo_entity in [
+            'todo.super_productivity_sp_morning_routine',
+            'todo.super_productivity_sp_reminders',
+            'todo.super_productivity_sp_evening_routine'
+          ] }}
 
       - action: todo.update_item
         target:
-          entity_id: "{{ todo_entity }}"
+          entity_id: "{{ target_todo_entity }}"
         data:
           item: "{{ uid }}"
           status: "{{ status }}"
+
+  dashboard_daily_rollover:
+    alias: Dashboard - perform daily rollover
+    description: >-
+      Reopen completed Morning and Evening routine items for the new dashboard
+      day, and remove completed Reminders while leaving incomplete reminders.
+    mode: single
+    sequence:
+      - variables:
+          rollover_time: "{{ states('input_datetime.dashboard_daily_rollover') }}"
+          now_time: "{{ now().strftime('%H:%M:%S') }}"
+
+      - variables:
+          rollover_day: >-
+            {% if now_time < rollover_time %}
+              {{ (now() - timedelta(days=1)).date().isoformat() }}
+            {% else %}
+              {{ now().date().isoformat() }}
+            {% endif %}
+
+      - action: todo.get_items
+        target:
+          entity_id: todo.super_productivity_sp_morning_routine
+        data:
+          status: completed
+        response_variable: morning_completed
+
+      - repeat:
+          for_each: >-
+            {{ morning_completed['todo.super_productivity_sp_morning_routine']['items']
+               | default([]) }}
+          sequence:
+            - action: todo.update_item
+              target:
+                entity_id: todo.super_productivity_sp_morning_routine
+              data:
+                item: "{{ repeat.item['uid'] }}"
+                status: needs_action
+
+      - action: todo.get_items
+        target:
+          entity_id: todo.super_productivity_sp_evening_routine
+        data:
+          status: completed
+        response_variable: evening_completed
+
+      - repeat:
+          for_each: >-
+            {{ evening_completed['todo.super_productivity_sp_evening_routine']['items']
+               | default([]) }}
+          sequence:
+            - action: todo.update_item
+              target:
+                entity_id: todo.super_productivity_sp_evening_routine
+              data:
+                item: "{{ repeat.item['uid'] }}"
+                status: needs_action
+
+      - action: todo.remove_completed_items
+        target:
+          entity_id: todo.super_productivity_sp_reminders
+
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dashboard_last_rollover_day
+        data:
+          value: "{{ rollover_day | trim }}"
+
+automation:
+  - id: dashboard_daily_lifecycle
+    alias: Dashboard - daily lifecycle
+    description: >-
+      Initialize dashboard times once, run the daily rollover at the configured
+      time, and catch up if Home Assistant was offline when rollover occurred.
+    mode: single
+    triggers:
+      - trigger: time
+        at: input_datetime.dashboard_daily_rollover
+        id: scheduled
+      - trigger: homeassistant
+        event: start
+        id: startup
+    actions:
+      - if:
+          - condition: state
+            entity_id: input_boolean.dashboard_times_initialized
+            state: "off"
+        then:
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.dashboard_daily_rollover
+            data:
+              time: "04:00:00"
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.dashboard_morning_end
+            data:
+              time: "10:00:00"
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.dashboard_evening_start
+            data:
+              time: "18:00:00"
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.dashboard_times_initialized
+
+      - if:
+          - condition: template
+            value_template: "{{ trigger.id == 'startup' }}"
+        then:
+          - delay: "00:00:02"
+
+      - variables:
+          rollover_time: "{{ states('input_datetime.dashboard_daily_rollover') }}"
+          now_time: "{{ now().strftime('%H:%M:%S') }}"
+
+      - variables:
+          expected_rollover_day: >-
+            {% if now_time < rollover_time %}
+              {{ (now() - timedelta(days=1)).date().isoformat() }}
+            {% else %}
+              {{ now().date().isoformat() }}
+            {% endif %}
+
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states('input_text.dashboard_last_rollover_day')
+                 != (expected_rollover_day | trim) }}
+        then:
+          - action: script.dashboard_daily_rollover
