@@ -48,11 +48,20 @@ jobs:
             BUILD_VERSION=${{ steps.version.outputs.version }}
             BUILD_ARCH=amd64
 
-      - name: Verify managed files are installed
+      - name: Verify managed files and integration patch
         shell: bash
         run: |
           set -euo pipefail
           target="$(mktemp -d)"
+
+          mkdir -p "$target/custom_components/super_productivity"
+          cat > "$target/custom_components/super_productivity/coordinator.py" <<'PY'
+          async def sample(self):
+              status, tasks = await asyncio.gather(
+                  self.api.async_get_status(),
+                  self.api.async_get_tasks(),
+              )
+          PY
 
           docker run --rm \
             -v "$target:/homeassistant" \
@@ -64,3 +73,16 @@ jobs:
           cmp \
             hatodor_config_sync/managed/esphome/reterminal-e1001-morning.yaml \
             "$target/esphome/reterminal-e1001-morning.yaml"
+
+          grep -Fq \
+            'self.api.async_get_tasks(include_done=True),' \
+            "$target/custom_components/super_productivity/coordinator.py"
+
+          # A second run must be idempotent: it should not duplicate or further
+          # modify the include_done patch.
+          docker run --rm \
+            -v "$target:/homeassistant" \
+            hatodor-config-sync:test
+
+          test "$(grep -Fc 'self.api.async_get_tasks(include_done=True),' \
+            "$target/custom_components/super_productivity/coordinator.py")" -eq 1
