@@ -1,15 +1,28 @@
 # Hatodor Config Sync
 
-This one-shot Home Assistant App installs the configuration files managed by
-this repository into Home Assistant's `/config` directory.
+This one-shot Home Assistant App installs the configuration managed by this
+repository into Home Assistant's `/config` directory.
 
-On install, start, or update it writes exactly these files:
+On install, start, or update it writes these repository-managed files:
 
 - `/config/packages/morning_dashboard.yaml`
 - `/config/esphome/reterminal-e1001-morning.yaml`
 
-The repository copies are authoritative; local edits to those two files will be
-overwritten the next time this App runs.
+It also applies one small idempotent patch to the installed HACS Super
+Productivity integration, when present:
+
+- `/config/custom_components/super_productivity/coordinator.py`
+
+The patch changes the integration's main task fetch from
+`async_get_tasks()` to `async_get_tasks(include_done=True)`. Without that,
+completed project tasks disappear from Home Assistant immediately after the
+integration refreshes, which conflicts with Hatodor's dashboard semantics.
+
+The repository copies of the package and ESPHome YAML are authoritative; local
+edits to those two files will be overwritten the next time this App runs. The
+Super Productivity patch is deliberately a one-line in-place modification
+rather than a vendored fork. A later HACS update may overwrite it; rerun Hatodor
+Config Sync after updating that integration to reapply the patch.
 
 ## One-time Home Assistant setup
 
@@ -51,6 +64,12 @@ they are eventually completed.
 If Home Assistant is offline at rollover, the lifecycle automation detects the
 missed dashboard day on startup and performs the rollover then.
 
-After the sync App runs, reload/restart Home Assistant for package changes to
-take effect. ESPHome source changes still require installing the firmware to the
-device (normally OTA from the ESPHome UI).
+## Applying updates
+
+After Config Sync changes the Home Assistant package or the Super Productivity
+Python integration, restart Home Assistant so both YAML and Python changes are
+loaded. ESPHome source changes still require installing the firmware to the
+device, normally OTA from ESPHome Builder.
+
+For a release that changes only the ESPHome YAML, a Home Assistant restart is
+not otherwise required.
