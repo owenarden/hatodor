@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+
+- Fix ESPHome compilation with current releases by letting `std::vector`
+  globals use their C++ default constructors instead of ambiguous `{}`
+  initializers.
+
 ## 0.2.1
 
 - Make the reTerminal E1001 header follow the active dashboard list name.
