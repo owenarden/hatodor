@@ -262,7 +262,7 @@ script:
   - id: redraw_display
     mode: restart
     then:
-      - delay: 500ms
+      - delay: 150ms
       - component.update: epaper_display
 
   # Home Assistant is deliberately hidden behind this wrapper script.
