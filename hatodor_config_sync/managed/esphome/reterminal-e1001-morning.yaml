@@ -99,15 +99,10 @@ globals:
     restore_value: no
     initial_value: '""'
 
-  - id: pending_uid
-    type: std::string
+  - id: pending_update_count
+    type: int
     restore_value: no
-    initial_value: '""'
-
-  - id: pending_todo_entity
-    type: std::string
-    restore_value: no
-    initial_value: '""'
+    initial_value: '0'
 
 display:
   - platform: waveshare_epaper
@@ -213,7 +208,7 @@ display:
       it.line(25, 430, 775, 430, COLOR_ON);
       it.printf(28, 442, id(font_small), "< / > select");
       it.printf(772, 442, id(font_small), TextAlign::TOP_RIGHT,
-                "GREEN = toggle");
+                "GREEN = toggle + next");
 
       if (total > max_visible) {
         it.printf(400, 442, id(font_small), TextAlign::TOP_CENTER,
@@ -233,7 +228,26 @@ binary_sensor:
     filters:
       - delayed_on: 20ms
     on_press:
-      - script.execute: complete_selected
+      - lambda: |-
+          const int n = id(checklist_titles).size();
+          if (n == 0 || id(active_todo_entity).empty()) return;
+
+          int i = id(selected_index);
+          if (i < 0 || i >= n) i = 0;
+
+          const std::string item_uid = id(checklist_uids)[i];
+          const std::string source_entity = id(active_todo_entity);
+          const bool target_done = !id(checklist_done)[i];
+
+          // Treat each green press as input immediately: toggle the selected
+          // row, advance to the next row, and send the backend update in
+          // parallel. Multiple presses can therefore accumulate before the
+          // relatively slow e-paper redraw occurs.
+          id(checklist_done)[i] = target_done;
+          id(selected_index) = (i + 1) % n;
+          id(pending_update_count)++;
+          id(update_task_status)->execute(item_uid, source_entity, target_done);
+      - script.execute: redraw_completion_batch
 
   - platform: gpio
     id: button_right
@@ -276,23 +290,34 @@ binary_sensor:
       - script.execute: redraw_display
 
 script:
-  # Keep a tiny debounce so contact bounce/near-simultaneous presses can settle,
-  # but let the e-paper driver's own refresh time dominate perceived latency.
+  # Navigation should begin refreshing almost immediately.
   - id: redraw_display
     mode: restart
     then:
       - delay: 30ms
       - component.update: epaper_display
 
+  # Green presses get a short idle window so several quick presses can be
+  # collected into one e-paper refresh. Each press still updates HA/SP
+  # immediately and advances the cursor in local state.
+  - id: redraw_completion_batch
+    mode: restart
+    then:
+      - delay: 180ms
+      - component.update: epaper_display
+
   # Home Assistant is deliberately hidden behind this wrapper script.
-  # ESPHome receives the active list name/entity but does not know how HA chose it.
+  # Do not let an authoritative poll overwrite optimistic local toggles while
+  # one or more green-button updates are still in flight.
   - id: fetch_checklist
     mode: restart
     then:
       - if:
           condition:
-            api.connected:
-              state_subscription_only: true
+            and:
+              - api.connected:
+                  state_subscription_only: true
+              - lambda: 'return id(pending_update_count) == 0;'
           then:
             - homeassistant.action:
                 action: script.morning_dashboard_get_items
@@ -329,19 +354,7 @@ script:
 
                         new_titles.emplace_back(summary);
                         new_uids.emplace_back(uid);
-
-                        // During a green-button round trip, preserve the local
-                        // optimistic state in either direction (checked or unchecked).
-                        bool shown_done = std::string(status) == "completed";
-                        if (!id(pending_uid).empty() && id(pending_uid) == uid) {
-                          for (size_t j = 0; j < id(checklist_uids).size(); j++) {
-                            if (id(checklist_uids)[j] == id(pending_uid)) {
-                              shown_done = id(checklist_done)[j];
-                              break;
-                            }
-                          }
-                        }
-                        new_done.emplace_back(shown_done);
+                        new_done.emplace_back(std::string(status) == "completed");
                       }
 
                       int new_selection = id(selected_index);
@@ -380,80 +393,72 @@ script:
                       level: WARN
                       format: "Could not fetch the active checklist from Home Assistant"
 
-  - id: complete_selected
-    mode: single
+  # One independent backend update per green press. Parallel mode lets a batch
+  # of rapid presses reach HA/SP without serializing on previous round trips.
+  - id: update_task_status
+    mode: parallel
+    max_runs: 16
+    parameters:
+      item_uid: string
+      source_todo_entity: string
+      target_done: bool
     then:
-      - lambda: |-
-          id(pending_uid).clear();
-          id(pending_todo_entity).clear();
-          const int i = id(selected_index);
-          if (i < 0 || i >= (int) id(checklist_uids).size()) return;
-          if (id(active_todo_entity).empty()) return;
+      - homeassistant.action:
+          action: script.morning_dashboard_set_status
+          data_template:
+            status: "{{ status_value }}"
+            uid: "{{ uid_value }}"
+            todo_entity: "{{ entity_value }}"
+          variables:
+            status_value: |-
+              return target_done
+                  ? std::string("completed")
+                  : std::string("needs_action");
+            uid_value: |-
+              return item_uid;
+            entity_value: |-
+              return source_todo_entity;
 
-          #ifndef ESPHOME_LOG_LEVEL_NONE
-          ESP_LOGD("dashboard", "Toggling item %d", i);
-          #endif
-
-          id(pending_uid) = id(checklist_uids)[i];
-          id(pending_todo_entity) = id(active_todo_entity);
-
-          // Toggle locally first for immediate feedback. If HA rejects the
-          // change, on_error below toggles it back to its previous state.
-          id(checklist_done)[i] = !id(checklist_done)[i];
-
-      - if:
-          condition:
-            lambda: 'return !id(pending_uid).empty() && !id(pending_todo_entity).empty();'
-          then:
-            - script.execute: redraw_display
-            - homeassistant.action:
-                action: script.morning_dashboard_set_status
-                data_template:
-                  status: "{{ target_status }}"
-                  uid: "{{ item_uid }}"
-                  todo_entity: "{{ source_todo_entity }}"
-                variables:
-                  target_status: |-
-                    for (size_t i = 0; i < id(checklist_uids).size(); i++) {
-                      if (id(checklist_uids)[i] == id(pending_uid)) {
-                        return id(checklist_done)[i]
-                            ? std::string("completed")
-                            : std::string("needs_action");
-                      }
-                    }
-                    return std::string("needs_action");
-                  item_uid: |-
-                    return id(pending_uid);
-                  source_todo_entity: |-
-                    return id(pending_todo_entity);
-
-                on_success:
-                  - lambda: |-
-                      id(pending_uid).clear();
-                      id(pending_todo_entity).clear();
-                  # The HA update action refreshes the integration coordinator;
-                  # fetch again shortly afterward to reconcile any other changes.
+          on_success:
+            - lambda: |-
+                if (id(pending_update_count) > 0) {
+                  id(pending_update_count)--;
+                }
+            - if:
+                condition:
+                  lambda: 'return id(pending_update_count) == 0;'
+                then:
                   - delay: 100ms
                   - script.execute: fetch_checklist
 
-                on_error:
-                  - lambda: |-
-                      for (size_t i = 0; i < id(checklist_uids).size(); i++) {
-                        if (id(checklist_uids)[i] == id(pending_uid)) {
-                          id(checklist_done)[i] = !id(checklist_done)[i];
-                          break;
-                        }
-                      }
-                      id(pending_uid).clear();
-                      id(pending_todo_entity).clear();
-                  - script.execute: redraw_display
-                  - logger.log:
-                      level: WARN
-                      format: "Home Assistant rejected the checklist toggle; restored previous state"
+          on_error:
+            - lambda: |-
+                // Revert only if this failed operation still matches the
+                // locally displayed state. A later toggle of the same UID wins.
+                for (size_t i = 0; i < id(checklist_uids).size(); i++) {
+                  if (id(checklist_uids)[i] == item_uid &&
+                      id(checklist_done)[i] == target_done) {
+                    id(checklist_done)[i] = !target_done;
+                    break;
+                  }
+                }
+                if (id(pending_update_count) > 0) {
+                  id(pending_update_count)--;
+                }
+            - script.execute: redraw_completion_batch
+            - if:
+                condition:
+                  lambda: 'return id(pending_update_count) == 0;'
+                then:
+                  - delay: 100ms
+                  - script.execute: fetch_checklist
+            - logger.log:
+                level: WARN
+                format: "Home Assistant rejected a checklist toggle; restored previous state"
 
 interval:
   # Polling keeps remote edits/completions and time-window list changes in sync.
-  # The display is refreshed only when the returned list actually changed.
+  # fetch_checklist suppresses polls while optimistic button updates are pending.
   - interval: 30s
     then:
       - script.execute: fetch_checklist
