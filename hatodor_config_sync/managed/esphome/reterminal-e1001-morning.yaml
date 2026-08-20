@@ -104,6 +104,11 @@ globals:
     restore_value: no
     initial_value: '0'
 
+  - id: green_seen_pulses
+    type: int
+    restore_value: no
+    initial_value: '0'
+
 display:
   - platform: waveshare_epaper
     id: epaper_display
@@ -215,40 +220,68 @@ display:
                   "%d of %d", selected + 1, total);
       }
 
-binary_sensor:
-  # Seeed reTerminal E1001 button GPIOs:
-  # GPIO3 green, GPIO4 right white, GPIO5 left white.
-  - platform: gpio
-    id: button_green
-    name: "${friendly_name} Green Button"
+sensor:
+  # The classic Waveshare driver blocks the main loop during a refresh. A GPIO
+  # binary sensor only preserves the latest edge across that blocked interval,
+  # so quick repeated green presses can collapse into one event. Use the
+  # interrupt-backed pulse counter in software mode instead: its ISR accumulates
+  # every press, even while the display is busy. The longer software filter also
+  # debounces the mechanical button.
+  - platform: pulse_counter
+    id: green_button_counter
     pin:
       number: GPIO3
-      mode: INPUT_PULLUP
-      inverted: true
-    filters:
-      - delayed_on: 20ms
-    on_press:
-      - lambda: |-
-          const int n = id(checklist_titles).size();
-          if (n == 0 || id(active_todo_entity).empty()) return;
+      mode:
+        input: true
+        pullup: true
+    use_pcnt: false
+    internal_filter: 20ms
+    count_mode:
+      rising_edge: DISABLE
+      falling_edge: INCREMENT
+    update_interval: 20ms
+    internal: true
+    total:
+      id: green_button_total
+      internal: true
+      on_value:
+        then:
+          - lambda: |-
+              const int current = static_cast<int>(x);
+              if (current < id(green_seen_pulses)) {
+                // Counter reset/wrap; resynchronize without synthesizing presses.
+                id(green_seen_pulses) = current;
+                return;
+              }
 
-          int i = id(selected_index);
-          if (i < 0 || i >= n) i = 0;
+              const int presses = current - id(green_seen_pulses);
+              if (presses <= 0) return;
+              id(green_seen_pulses) = current;
 
-          const std::string item_uid = id(checklist_uids)[i];
-          const std::string source_entity = id(active_todo_entity);
-          const bool target_done = !id(checklist_done)[i];
+              const int n = id(checklist_titles).size();
+              if (n == 0 || id(active_todo_entity).empty()) return;
 
-          // Treat each green press as input immediately: toggle the selected
-          // row, advance to the next row, and send the backend update in
-          // parallel. Multiple presses can therefore accumulate before the
-          // relatively slow e-paper redraw occurs.
-          id(checklist_done)[i] = target_done;
-          id(selected_index) = (i + 1) % n;
-          id(pending_update_count)++;
-          id(update_task_status)->execute(item_uid, source_entity, target_done);
-      - script.execute: redraw_completion_batch
+              for (int press = 0; press < presses; press++) {
+                int i = id(selected_index);
+                if (i < 0 || i >= n) i = 0;
 
+                const std::string item_uid = id(checklist_uids)[i];
+                const std::string source_entity = id(active_todo_entity);
+                const bool target_done = !id(checklist_done)[i];
+
+                id(checklist_done)[i] = target_done;
+                id(selected_index) = (i + 1) % n;
+                id(pending_update_count)++;
+                id(update_task_status)->execute(
+                    item_uid, source_entity, target_done);
+              }
+
+              // Coalesce all presses observed in this interval into one redraw.
+              id(redraw_completion_batch)->execute();
+
+binary_sensor:
+  # Seeed reTerminal E1001 white-button GPIOs:
+  # GPIO4 right, GPIO5 left. Green GPIO3 is handled by pulse_counter above.
   - platform: gpio
     id: button_right
     name: "${friendly_name} Right Button"
@@ -298,13 +331,26 @@ script:
       - component.update: epaper_display
 
   # Green presses get a short idle window so several quick presses can be
-  # collected into one e-paper refresh. Each press still updates HA/SP
-  # immediately and advances the cursor in local state.
+  # collected into one e-paper refresh. Presses that occur during the blocking
+  # display operation are retained by green_button_counter and applied afterward.
   - id: redraw_completion_batch
     mode: restart
     then:
       - delay: 180ms
       - component.update: epaper_display
+
+  # Wait briefly after the last backend response before reconciling. This gives
+  # the pulse counter time to drain any button edges captured while the display
+  # or a previous callback had the main loop blocked.
+  - id: reconcile_after_updates
+    mode: restart
+    then:
+      - delay: 300ms
+      - if:
+          condition:
+            lambda: 'return id(pending_update_count) == 0;'
+          then:
+            - script.execute: fetch_checklist
 
   # Home Assistant is deliberately hidden behind this wrapper script.
   # Do not let an authoritative poll overwrite optimistic local toggles while
@@ -424,12 +470,7 @@ script:
                 if (id(pending_update_count) > 0) {
                   id(pending_update_count)--;
                 }
-            - if:
-                condition:
-                  lambda: 'return id(pending_update_count) == 0;'
-                then:
-                  - delay: 100ms
-                  - script.execute: fetch_checklist
+            - script.execute: reconcile_after_updates
 
           on_error:
             - lambda: |-
@@ -446,12 +487,7 @@ script:
                   id(pending_update_count)--;
                 }
             - script.execute: redraw_completion_batch
-            - if:
-                condition:
-                  lambda: 'return id(pending_update_count) == 0;'
-                then:
-                  - delay: 100ms
-                  - script.execute: fetch_checklist
+            - script.execute: reconcile_after_updates
             - logger.log:
                 level: WARN
                 format: "Home Assistant rejected a checklist toggle; restored previous state"
