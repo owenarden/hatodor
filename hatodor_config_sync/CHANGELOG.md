@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.2
+
+- Make the E1001 green button toggle either direction: incomplete to completed
+  or completed back to incomplete.
+- Advance the selection to the next row after every green-button toggle.
+- Allow rapid green presses to batch locally before one e-paper redraw, so
+  multiple consecutive tasks can be checked off without waiting for the panel.
+- Send batched task status changes to Home Assistant/Super Productivity in
+  parallel while preserving optimistic local state.
+- Suppress authoritative checklist polling while green-button updates are in
+  flight, then reconcile once the batch has finished.
+
 ## 0.3.1
 
 - Reduce the E1001 redraw debounce from 150 ms to 30 ms so the panel refresh
