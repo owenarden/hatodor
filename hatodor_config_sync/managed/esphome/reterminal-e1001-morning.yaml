@@ -310,7 +310,10 @@ script:
 
                         new_titles.emplace_back(summary);
                         new_uids.emplace_back(uid);
-                        new_done.emplace_back(std::string(status) == "completed");
+                        const bool completed = std::string(status) == "completed";
+                        const bool optimistic =
+                            !id(pending_uid).empty() && id(pending_uid) == uid;
+                        new_done.emplace_back(completed || optimistic);
                       }
 
                       int new_selection = id(selected_index);
@@ -369,10 +372,15 @@ script:
           id(pending_uid) = id(checklist_uids)[i];
           id(pending_todo_entity) = id(active_todo_entity);
 
+          // Give immediate local feedback. The HA/SP round trip happens after
+          // this state change; on_error below rolls it back if the update fails.
+          id(checklist_done)[i] = true;
+
       - if:
           condition:
             lambda: 'return !id(pending_uid).empty() && !id(pending_todo_entity).empty();'
           then:
+            - script.execute: redraw_display
             - homeassistant.action:
                 action: script.morning_dashboard_set_status
                 data:
@@ -387,23 +395,28 @@ script:
                     return id(pending_todo_entity);
 
                 on_success:
-                  # Optimistically reflect success immediately; then fetch the
-                  # authoritative list again in case Super Productivity changed it.
                   - lambda: |-
-                      for (size_t i = 0; i < id(checklist_uids).size(); i++) {
-                        if (id(checklist_uids)[i] == id(pending_uid)) {
-                          id(checklist_done)[i] = true;
-                          break;
-                        }
-                      }
-                  - script.execute: redraw_display
-                  - delay: 300ms
+                      id(pending_uid).clear();
+                      id(pending_todo_entity).clear();
+                  # The HA update action refreshes the integration coordinator;
+                  # fetch again shortly afterward to reconcile any other changes.
+                  - delay: 100ms
                   - script.execute: fetch_checklist
 
                 on_error:
+                  - lambda: |-
+                      for (size_t i = 0; i < id(checklist_uids).size(); i++) {
+                        if (id(checklist_uids)[i] == id(pending_uid)) {
+                          id(checklist_done)[i] = false;
+                          break;
+                        }
+                      }
+                      id(pending_uid).clear();
+                      id(pending_todo_entity).clear();
+                  - script.execute: redraw_display
                   - logger.log:
                       level: WARN
-                      format: "Home Assistant rejected the checklist update"
+                      format: "Home Assistant rejected the checklist update; reverted local completion"
 
 interval:
   # Polling keeps remote edits/completions and time-window list changes in sync.
