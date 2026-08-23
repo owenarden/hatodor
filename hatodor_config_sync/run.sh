@@ -14,14 +14,18 @@ mkdir -p \
 
 cp /managed/packages/morning_dashboard.yaml \
     "$HA_CONFIG/packages/morning_dashboard.yaml"
+cp /managed/packages/school_dashboard.yaml \
+    "$HA_CONFIG/packages/school_dashboard.yaml"
 cp /managed/esphome/reterminal-e1001-morning.yaml \
     "$HA_CONFIG/esphome/reterminal-e1001-morning.yaml"
 
 chmod 0644 \
     "$HA_CONFIG/packages/morning_dashboard.yaml" \
+    "$HA_CONFIG/packages/school_dashboard.yaml" \
     "$HA_CONFIG/esphome/reterminal-e1001-morning.yaml"
 
 echo "Installed Hatodor-managed Home Assistant package: packages/morning_dashboard.yaml"
+echo "Installed Hatodor-managed Home Assistant package: packages/school_dashboard.yaml"
 echo "Installed Hatodor-managed ESPHome config: esphome/reterminal-e1001-morning.yaml"
 
 # The upstream Super Productivity integration currently fetches its main task
