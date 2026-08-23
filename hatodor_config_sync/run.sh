@@ -48,3 +48,29 @@ if [ -f "$SP_COORDINATOR" ]; then
 else
     echo "WARNING: Super Productivity custom integration not found at $SP_COORDINATOR; include_done patch not applied" >&2
 fi
+
+# Home Assistant has one generic TodoItem `due` field, while Super Productivity
+# distinguishes planned/scheduled time (dueWithTime/dueDay) from an actual
+# deadline (deadlineWithTime/deadlineDay). Hatodor uses SP deadlines. Patch the
+# integration's TodoItem mapping so HA's generic `due` field reads/writes the SP
+# deadline fields, leaving SP scheduling untouched.
+SP_TODO="$HA_CONFIG/custom_components/super_productivity/todo.py"
+if [ -f "$SP_TODO" ]; then
+    if grep -Fq '"deadlineWithTime"' "$SP_TODO" && \
+       grep -Fq '"deadlineDay"' "$SP_TODO" && \
+       ! grep -Fq '"dueWithTime"' "$SP_TODO" && \
+       ! grep -Fq '"dueDay"' "$SP_TODO"; then
+        echo "Super Productivity todo mapping already uses deadline fields"
+    elif grep -Fq '"dueWithTime"' "$SP_TODO" && \
+         grep -Fq '"dueDay"' "$SP_TODO"; then
+        sed -i \
+            -e 's/"dueWithTime"/"deadlineWithTime"/g' \
+            -e 's/"dueDay"/"deadlineDay"/g' \
+            "$SP_TODO"
+        echo "Patched Super Productivity TodoItem due mapping to use SP deadlines"
+    else
+        echo "WARNING: Super Productivity todo deadline mapping was not recognized; deadline patch not applied" >&2
+    fi
+else
+    echo "WARNING: Super Productivity todo platform not found at $SP_TODO; deadline patch not applied" >&2
+fi
