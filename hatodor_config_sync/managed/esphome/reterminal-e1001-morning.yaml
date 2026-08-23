@@ -66,6 +66,11 @@ font:
     id: font_small
     size: 18
 
+qr_code:
+  - id: assignment_qr
+    value: "https://example.invalid/"
+    ecc: MEDIUM
+
 globals:
   - id: checklist_titles
     type: std::vector<std::string>
@@ -113,6 +118,21 @@ globals:
     restore_value: no
     initial_value: '0'
 
+  - id: qr_mode
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: qr_title
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+  - id: qr_url
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
 display:
   - platform: waveshare_epaper
     id: epaper_display
@@ -143,15 +163,52 @@ display:
       const int row_height = 43;
       const int first_row_y = 78;
 
+      // Assignment detail view. The QR component is updated dynamically when
+      // green is pressed on a Canvas row.
+      if (id(qr_mode)) {
+        std::string title = id(qr_title);
+        if (title.size() > 44) {
+          title = title.substr(0, 41) + "...";
+        }
+
+        it.printf(width / 2, 18, id(font_item), TextAlign::TOP_CENTER,
+                  "%s", title.c_str());
+        it.line(25, 60, 775, 60, COLOR_ON);
+
+        const int modules = id(assignment_qr).get_size();
+        int scale = modules > 0 ? 300 / modules : 4;
+        if (scale < 2) scale = 2;
+        if (scale > 8) scale = 8;
+        const int qr_size = modules * scale;
+        const int qr_x = (width - qr_size) / 2;
+        const int qr_y = 78;
+        it.qr_code(qr_x, qr_y, id(assignment_qr), COLOR_ON, scale);
+
+        it.printf(width / 2, 398, id(font_small), TextAlign::TOP_CENTER,
+                  "Scan to open Canvas");
+        it.line(25, 430, 775, 430, COLOR_ON);
+        it.printf(28, 442, id(font_small), "< / > back + select");
+        it.printf(772, 442, id(font_small), TextAlign::TOP_RIGHT,
+                  "GREEN = back");
+        return;
+      }
+
       const int total = id(checklist_titles).size();
       int done_count = 0;
       for (bool done : id(checklist_done)) {
         if (done) done_count++;
       }
 
+      const bool daytime = id(active_list_name) == "Coming up";
+
       it.printf(28, 18, id(font_title), "%s", id(active_list_name).c_str());
-      it.printf(772, 27, id(font_small), TextAlign::TOP_RIGHT,
-                "%d/%d done", done_count, total);
+      if (daytime) {
+        it.printf(772, 27, id(font_small), TextAlign::TOP_RIGHT,
+                  "%d items", total);
+      } else {
+        it.printf(772, 27, id(font_small), TextAlign::TOP_RIGHT,
+                  "%d/%d done", done_count, total);
+      }
       it.line(25, 66, 775, 66, COLOR_ON);
 
       if (total == 0) {
@@ -175,58 +232,103 @@ display:
 
       const int visible = std::min(total - first, max_visible);
 
+      auto starts_with = [](const std::string &value, const char *prefix) {
+        return value.rfind(prefix, 0) == 0;
+      };
+
+      auto section_for = [&](int i) -> std::string {
+        if (!daytime || i < 0 || i >= total) return std::string();
+        const std::string &uid = id(checklist_uids)[i];
+        if (starts_with(uid, "canvas:urgent:")) return "NEEDS ATTENTION";
+        if (id(checklist_done)[i]) return "COMPLETED";
+        if (starts_with(uid, "canvas:upcoming:")) return "COMING UP";
+        if (starts_with(uid, "canvas:completed:")) return "COMPLETED";
+        return "REMINDERS";
+      };
+
       for (int slot = 0; slot < visible; slot++) {
         const int i = first + slot;
         const int y = first_row_y + slot * row_height;
         const bool selected_row = (i == selected);
         const bool done = id(checklist_done)[i];
+        const std::string &uid = id(checklist_uids)[i];
+        const bool canvas_row = starts_with(uid, "canvas:");
+        const bool urgent_row = starts_with(uid, "canvas:urgent:");
         const std::string deadline =
             i < (int) id(checklist_deadlines).size()
                 ? id(checklist_deadlines)[i]
                 : std::string();
 
-        // A compact chevron marks the selected row without boxing in the text.
-        if (selected_row) {
-          it.line(27, y + 10, 35, y + 18, COLOR_ON);
-          it.line(35, y + 18, 27, y + 26, COLOR_ON);
-          it.line(29, y + 10, 37, y + 18, COLOR_ON);
-          it.line(37, y + 18, 29, y + 26, COLOR_ON);
+        const std::string section = section_for(i);
+        const bool show_section = daytime &&
+            (slot == 0 || section != section_for(i - 1));
+        const int text_y = show_section ? y + 15 : y + 5;
+        const int status_y = show_section ? y + 27 : y + 19;
+
+        if (show_section) {
+          it.printf(92, y - 2, id(font_small), "%s", section.c_str());
         }
 
-        // Draw checklist icons directly so they do not depend on font glyphs.
+        // A compact chevron marks the selected row without boxing in the text.
+        if (selected_row) {
+          it.line(27, status_y - 9, 35, status_y - 1, COLOR_ON);
+          it.line(35, status_y - 1, 27, status_y + 7, COLOR_ON);
+          it.line(29, status_y - 9, 37, status_y - 1, COLOR_ON);
+          it.line(37, status_y - 1, 29, status_y + 7, COLOR_ON);
+        }
+
         const int status_x = 62;
-        const int status_y = y + 19;
-        it.circle(status_x, status_y, 10, COLOR_ON);
-        if (done) {
-          it.line(status_x - 5, status_y, status_x - 1, status_y + 4, COLOR_ON);
-          it.line(status_x - 1, status_y + 4, status_x + 6, status_y - 5, COLOR_ON);
-          it.line(status_x - 5, status_y + 1, status_x - 1, status_y + 5, COLOR_ON);
-          it.line(status_x - 1, status_y + 5, status_x + 6, status_y - 4, COLOR_ON);
+        if (canvas_row && !done) {
+          if (urgent_row) {
+            it.circle(status_x, status_y, 10, COLOR_ON);
+            it.printf(status_x, status_y - 10, id(font_small),
+                      TextAlign::TOP_CENTER, "!");
+          } else {
+            // A tiny QR-like square distinguishes Canvas rows from toggleable
+            // Super Productivity reminders.
+            it.rectangle(status_x - 9, status_y - 9, 18, 18, COLOR_ON);
+            it.filled_rectangle(status_x - 6, status_y - 6, 4, 4, COLOR_ON);
+            it.filled_rectangle(status_x + 2, status_y - 6, 4, 4, COLOR_ON);
+            it.filled_rectangle(status_x - 6, status_y + 2, 4, 4, COLOR_ON);
+          }
+        } else {
+          // Checklist icon for Super Productivity rows and completed items.
+          it.circle(status_x, status_y, 10, COLOR_ON);
+          if (done) {
+            it.line(status_x - 5, status_y, status_x - 1, status_y + 4, COLOR_ON);
+            it.line(status_x - 1, status_y + 4, status_x + 6, status_y - 5, COLOR_ON);
+            it.line(status_x - 5, status_y + 1, status_x - 1, status_y + 5, COLOR_ON);
+            it.line(status_x - 1, status_y + 5, status_x + 6, status_y - 4, COLOR_ON);
+          }
         }
 
         std::string title = id(checklist_titles)[i];
-        const size_t max_chars = deadline.empty() ? 43 : 34;
+        const size_t max_chars = deadline.empty() ? 43 : 31;
         if (title.size() > max_chars) {
           title = title.substr(0, max_chars - 3) + "...";
         }
 
         // The panel is 1-bit, so use lighter typography rather than fake gray.
         if (done) {
-          it.printf(92, y + 5, id(font_completed), "%s", title.c_str());
+          it.printf(92, text_y, id(font_completed), "%s", title.c_str());
         } else {
-          it.printf(92, y + 5, id(font_item), "%s", title.c_str());
+          it.printf(92, text_y, id(font_item), "%s", title.c_str());
         }
 
         if (!deadline.empty()) {
-          it.printf(772, y + 10, id(font_small), TextAlign::TOP_RIGHT,
+          it.printf(772, text_y + 5, id(font_small), TextAlign::TOP_RIGHT,
                     "%s", deadline.c_str());
         }
       }
 
       it.line(25, 430, 775, 430, COLOR_ON);
       it.printf(28, 442, id(font_small), "< / > select");
+
+      const bool selected_canvas =
+          selected >= 0 && selected < total &&
+          starts_with(id(checklist_uids)[selected], "canvas:");
       it.printf(772, 442, id(font_small), TextAlign::TOP_RIGHT,
-                "GREEN = toggle + next");
+                selected_canvas ? "GREEN = open QR" : "GREEN = toggle + next");
 
       if (total > max_visible) {
         it.printf(400, 442, id(font_small), TextAlign::TOP_CENTER,
@@ -271,14 +373,40 @@ sensor:
               if (presses <= 0) return;
               id(green_seen_pulses) = current;
 
+              // Any green press closes the QR detail view.
+              if (id(qr_mode)) {
+                id(qr_mode) = false;
+                id(redraw_completion_batch)->execute();
+                return;
+              }
+
               const int n = id(checklist_titles).size();
-              if (n == 0 || id(active_todo_entity).empty()) return;
+              if (n == 0) return;
 
               for (int press = 0; press < presses; press++) {
                 int i = id(selected_index);
                 if (i < 0 || i >= n) i = 0;
 
                 const std::string item_uid = id(checklist_uids)[i];
+
+                // Canvas rows are informational. Green opens the assignment URL
+                // as a QR code instead of attempting to update a todo item.
+                if (item_uid.rfind("canvas:", 0) == 0) {
+                  size_t url_pos = item_uid.find("https://");
+                  if (url_pos == std::string::npos) {
+                    url_pos = item_uid.find("http://");
+                  }
+                  if (url_pos != std::string::npos) {
+                    id(qr_title) = id(checklist_titles)[i];
+                    id(qr_url) = item_uid.substr(url_pos);
+                    id(assignment_qr).set_value(id(qr_url));
+                    id(qr_mode) = true;
+                  }
+                  break;
+                }
+
+                if (id(active_todo_entity).empty()) return;
+
                 const std::string source_entity = id(active_todo_entity);
                 const bool target_done = !id(checklist_done)[i];
 
@@ -306,6 +434,7 @@ binary_sensor:
       - delayed_on: 20ms
     on_press:
       - lambda: |-
+          if (id(qr_mode)) id(qr_mode) = false;
           const int n = id(checklist_titles).size();
           if (n == 0) return;
           if (id(selected_index) < 0) {
@@ -326,6 +455,7 @@ binary_sensor:
       - delayed_on: 20ms
     on_press:
       - lambda: |-
+          if (id(qr_mode)) id(qr_mode) = false;
           const int n = id(checklist_titles).size();
           if (n == 0) return;
           if (id(selected_index) < 0) {
@@ -379,7 +509,7 @@ script:
               - lambda: 'return id(pending_update_count) == 0;'
           then:
             - homeassistant.action:
-                action: script.morning_dashboard_get_items
+                action: script.dashboard_get_combined_items
                 capture_response: true
 
                 on_success:
