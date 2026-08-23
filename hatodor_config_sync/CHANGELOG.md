@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+- Map Home Assistant's generic TodoItem `due` field to Super Productivity's
+  actual `deadlineWithTime` / `deadlineDay` fields instead of SP's separate
+  planned/scheduled `dueWithTime` / `dueDay` fields.
+- Return a local-time deadline label for each dashboard item and display timed
+  deadlines right-justified on the E1001 task rows.
+- Preserve each task's deadline clock time at daily rollover while moving the
+  deadline into the new dashboard day.
+- Treat deadlines earlier than the rollover time as belonging to the following
+  calendar date, so post-midnight Evening deadlines stay in the same dashboard day.
+- Extend the Config Sync smoke test to verify the deadline mapping patch and its
+  idempotence.
+
 ## 0.3.3
 
 - Replace the green-button GPIO binary sensor with an interrupt-backed pulse
