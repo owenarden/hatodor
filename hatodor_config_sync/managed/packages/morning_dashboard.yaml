@@ -47,7 +47,8 @@ script:
     alias: Dashboard - get active items
     description: >-
       Return both incomplete and completed items from the currently active
-      Super Productivity project, together with the source entity and list name.
+      Super Productivity project, together with the source entity, list name,
+      and local-time deadline labels for timed due dates.
     mode: parallel
     sequence:
       - variables:
@@ -85,10 +86,23 @@ script:
 
       - variables:
           source_entity: "{{ todo_entity | trim }}"
+          deadline_labels: >-
+            {% set ns = namespace(values=[]) %}
+            {% for item in todo_data[source_entity]['items'] | default([]) %}
+              {% if item['due'] is defined and item['due'] is not none
+                    and (item['due'] | string | length) > 10 %}
+                {% set local_due = as_local(as_datetime(item['due'])) %}
+                {% set ns.values = ns.values + [local_due.strftime('%I:%M %p')] %}
+              {% else %}
+                {% set ns.values = ns.values + [''] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.values }}
           dashboard_response:
             list_name: "{{ list_name | trim }}"
             todo_entity: "{{ source_entity }}"
             items: "{{ todo_data[source_entity]['items'] | default([]) }}"
+            deadlines: "{{ deadline_labels }}"
 
       - stop: Return the active dashboard checklist
         response_variable: dashboard_response
@@ -151,11 +165,79 @@ script:
           item: "{{ uid }}"
           status: "{{ status }}"
 
+  dashboard_reset_daily_deadlines:
+    alias: Dashboard - reset daily deadlines
+    description: >-
+      Preserve each task's local deadline time while moving timed due dates into
+      the new dashboard day. Deadlines before rollover belong to the following
+      calendar date so post-midnight Evening tasks remain in the same dashboard day.
+    mode: parallel
+    fields:
+      todo_entity:
+        name: Todo entity
+        required: true
+        selector:
+          text:
+      rollover_day:
+        name: Dashboard day
+        required: true
+        selector:
+          text:
+    sequence:
+      - variables:
+          target_todo_entity: "{{ todo_entity | trim }}"
+          target_rollover_day: "{{ rollover_day | trim }}"
+          rollover_time: "{{ states('input_datetime.dashboard_daily_rollover') }}"
+
+      - condition: template
+        value_template: >-
+          {{ target_todo_entity in [
+            'todo.super_productivity_sp_morning_routine',
+            'todo.super_productivity_sp_reminders',
+            'todo.super_productivity_sp_evening_routine'
+          ] }}
+
+      - action: todo.get_items
+        target:
+          entity_id: "{{ target_todo_entity }}"
+        data:
+          status:
+            - needs_action
+            - completed
+        response_variable: deadline_items
+
+      - repeat:
+          for_each: >-
+            {{ deadline_items[target_todo_entity]['items'] | default([]) }}
+          sequence:
+            - if:
+                - condition: template
+                  value_template: >-
+                    {{ repeat.item['due'] is defined
+                       and repeat.item['due'] is not none
+                       and (repeat.item['due'] | string | length) > 10 }}
+              then:
+                - action: todo.update_item
+                  target:
+                    entity_id: "{{ target_todo_entity }}"
+                  data:
+                    item: "{{ repeat.item['uid'] }}"
+                    due_datetime: >-
+                      {% set local_due = as_local(as_datetime(repeat.item['due'])) %}
+                      {% set due_time = local_due.strftime('%H:%M:%S') %}
+                      {% set base_day = as_datetime(target_rollover_day) %}
+                      {% if due_time < rollover_time %}
+                        {{ (base_day + timedelta(days=1)).date().isoformat() }} {{ due_time }}
+                      {% else %}
+                        {{ target_rollover_day }} {{ due_time }}
+                      {% endif %}
+
   dashboard_daily_rollover:
     alias: Dashboard - perform daily rollover
     description: >-
       Reopen completed Morning and Evening routine items for the new dashboard
-      day, and remove completed Reminders while leaving incomplete reminders.
+      day, remove completed Reminders, and move every timed task deadline into
+      the new dashboard day while preserving its local clock time.
     mode: single
     sequence:
       - variables:
@@ -211,6 +293,21 @@ script:
       - action: todo.remove_completed_items
         target:
           entity_id: todo.super_productivity_sp_reminders
+
+      - action: script.dashboard_reset_daily_deadlines
+        data:
+          todo_entity: todo.super_productivity_sp_morning_routine
+          rollover_day: "{{ rollover_day | trim }}"
+
+      - action: script.dashboard_reset_daily_deadlines
+        data:
+          todo_entity: todo.super_productivity_sp_reminders
+          rollover_day: "{{ rollover_day | trim }}"
+
+      - action: script.dashboard_reset_daily_deadlines
+        data:
+          todo_entity: todo.super_productivity_sp_evening_routine
+          rollover_day: "{{ rollover_day | trim }}"
 
       - action: input_text.set_value
         target:
