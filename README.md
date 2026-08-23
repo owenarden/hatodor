@@ -18,9 +18,20 @@ A one-shot App that deploys the repository-managed configuration files into the
 Home Assistant configuration directory:
 
 - `packages/morning_dashboard.yaml`
+- `packages/school_dashboard.yaml`
 - `esphome/reterminal-e1001-morning.yaml`
 
-It also applies a small idempotent patch to the installed HACS Super
+The school dashboard package wraps the existing dashboard response during the
+daytime Reminders window. It combines Canvas assignments with Super Productivity
+reminders in this order: needs attention, reminders, coming up, completed.
+Canvas rows are selectable on the reTerminal; pressing green opens a QR code for
+the assignment URL, while Super Productivity rows retain the existing toggle
+behavior. Morning and Evening routine behavior is unchanged.
+
+`packages/school_dashboard.yaml` expects the Canvas helper sensor
+`sensor.canvas_student_assignments_28_days` to exist.
+
+Config Sync also applies a small idempotent patch to the installed HACS Super
 Productivity integration so project task fetches use `include_done=True`. This
 keeps completed routine/reminder tasks visible to the dashboard until Hatodor's
 rollover logic resets or removes them. A later HACS update can overwrite that
@@ -31,7 +42,7 @@ The source copies live under `hatodor_config_sync/managed/`. They are the source
 of truth; local edits to the deployed YAML copies are overwritten when Config
 Sync runs.
 
-For Home Assistant to load the package, perform this bootstrap once in
+For Home Assistant to load the packages, perform this bootstrap once in
 `/config/configuration.yaml`:
 
 ```yaml
