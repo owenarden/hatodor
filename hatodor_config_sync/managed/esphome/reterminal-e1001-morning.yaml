@@ -79,6 +79,10 @@ globals:
     type: std::vector<bool>
     restore_value: no
 
+  - id: checklist_deadlines
+    type: std::vector<std::string>
+    restore_value: no
+
   - id: selected_index
     type: int
     restore_value: no
@@ -176,6 +180,10 @@ display:
         const int y = first_row_y + slot * row_height;
         const bool selected_row = (i == selected);
         const bool done = id(checklist_done)[i];
+        const std::string deadline =
+            i < (int) id(checklist_deadlines).size()
+                ? id(checklist_deadlines)[i]
+                : std::string();
 
         // A compact chevron marks the selected row without boxing in the text.
         if (selected_row) {
@@ -197,7 +205,7 @@ display:
         }
 
         std::string title = id(checklist_titles)[i];
-        constexpr size_t max_chars = 43;
+        const size_t max_chars = deadline.empty() ? 43 : 34;
         if (title.size() > max_chars) {
           title = title.substr(0, max_chars - 3) + "...";
         }
@@ -207,6 +215,11 @@ display:
           it.printf(92, y + 5, id(font_completed), "%s", title.c_str());
         } else {
           it.printf(92, y + 5, id(font_item), "%s", title.c_str());
+        }
+
+        if (!deadline.empty()) {
+          it.printf(772, y + 10, id(font_small), TextAlign::TOP_RIGHT,
+                    "%s", deadline.c_str());
         }
       }
 
@@ -373,6 +386,8 @@ script:
                   - lambda: |-
                       JsonArrayConst items =
                           response["response"]["items"].as<JsonArrayConst>();
+                      JsonArrayConst deadlines =
+                          response["response"]["deadlines"].as<JsonArrayConst>();
 
                       if (items.isNull()) {
                         ESP_LOGW("dashboard", "Checklist response did not contain an items array");
@@ -390,17 +405,25 @@ script:
                       std::vector<std::string> new_titles;
                       std::vector<std::string> new_uids;
                       std::vector<bool> new_done;
+                      std::vector<std::string> new_deadlines;
 
+                      size_t raw_index = 0;
                       for (JsonObjectConst item : items) {
                         const char *summary = item["summary"] | "";
                         const char *uid = item["uid"] | "";
                         const char *status = item["status"] | "needs_action";
+                        const char *deadline = "";
+                        if (!deadlines.isNull() && raw_index < deadlines.size()) {
+                          deadline = deadlines[raw_index] | "";
+                        }
+                        raw_index++;
 
                         if (uid[0] == '\0') continue;
 
                         new_titles.emplace_back(summary);
                         new_uids.emplace_back(uid);
                         new_done.emplace_back(std::string(status) == "completed");
+                        new_deadlines.emplace_back(deadline);
                       }
 
                       int new_selection = id(selected_index);
@@ -418,6 +441,7 @@ script:
                           (new_titles != id(checklist_titles)) ||
                           (new_uids != id(checklist_uids)) ||
                           (new_done != id(checklist_done)) ||
+                          (new_deadlines != id(checklist_deadlines)) ||
                           (new_selection != id(selected_index));
 
                       id(active_list_name) = std::move(new_list_name);
@@ -425,6 +449,7 @@ script:
                       id(checklist_titles) = std::move(new_titles);
                       id(checklist_uids) = std::move(new_uids);
                       id(checklist_done) = std::move(new_done);
+                      id(checklist_deadlines) = std::move(new_deadlines);
                       id(selected_index) = new_selection;
                       id(checklist_changed) = changed;
 
