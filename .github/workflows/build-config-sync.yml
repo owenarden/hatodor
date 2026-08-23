@@ -48,7 +48,7 @@ jobs:
             BUILD_VERSION=${{ steps.version.outputs.version }}
             BUILD_ARCH=amd64
 
-      - name: Verify managed files and integration patch
+      - name: Verify managed files and integration patches
         shell: bash
         run: |
           set -euo pipefail
@@ -61,6 +61,21 @@ jobs:
                   self.api.async_get_status(),
                   self.api.async_get_tasks(),
               )
+          PY
+
+          cat > "$target/custom_components/super_productivity/todo.py" <<'PY'
+          def parse(task):
+              a = task.get("dueWithTime")
+              b = task.get("dueDay")
+              return a, b
+
+          def create(task_data, value):
+              task_data["dueWithTime"] = value
+              task_data["dueDay"] = None
+
+          def update(updates, value):
+              updates["dueWithTime"] = value
+              updates["dueDay"] = None
           PY
 
           docker run --rm \
@@ -78,11 +93,27 @@ jobs:
             'self.api.async_get_tasks(include_done=True),' \
             "$target/custom_components/super_productivity/coordinator.py"
 
+          grep -Fq '"deadlineWithTime"' \
+            "$target/custom_components/super_productivity/todo.py"
+          grep -Fq '"deadlineDay"' \
+            "$target/custom_components/super_productivity/todo.py"
+          ! grep -Fq '"dueWithTime"' \
+            "$target/custom_components/super_productivity/todo.py"
+          ! grep -Fq '"dueDay"' \
+            "$target/custom_components/super_productivity/todo.py"
+
           # A second run must be idempotent: it should not duplicate or further
-          # modify the include_done patch.
+          # modify either integration patch.
+          coordinator_before="$(sha256sum "$target/custom_components/super_productivity/coordinator.py")"
+          todo_before="$(sha256sum "$target/custom_components/super_productivity/todo.py")"
+
           docker run --rm \
             -v "$target:/homeassistant" \
             hatodor-config-sync:test
 
           test "$(grep -Fc 'self.api.async_get_tasks(include_done=True),' \
             "$target/custom_components/super_productivity/coordinator.py")" -eq 1
+          test "$coordinator_before" = \
+            "$(sha256sum "$target/custom_components/super_productivity/coordinator.py")"
+          test "$todo_before" = \
+            "$(sha256sum "$target/custom_components/super_productivity/todo.py")"
