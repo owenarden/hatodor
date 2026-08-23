@@ -1,0 +1,123 @@
+# Adds Canvas assignments to the daytime reTerminal view without changing the
+# Morning/Evening routine behavior. This wraps morning_dashboard_get_items and
+# only enriches its response while the active list is Reminders.
+#
+# Requires sensor.canvas_student_assignments_28_days from the Canvas dashboard
+# package. Canvas rows are encoded with a canvas:<section>:<url> UID so ESPHome
+# can distinguish QR-opening rows from toggleable Super Productivity rows.
+
+script:
+  dashboard_get_combined_items:
+    alias: Dashboard - get combined items
+    description: >-
+      Return the normal active checklist, but during the daytime Reminders
+      window combine Canvas assignments with Super Productivity reminders.
+      Order is needs-attention, reminders, upcoming assignments, completed.
+    mode: parallel
+    sequence:
+      - action: script.morning_dashboard_get_items
+        response_variable: base_response
+
+      - if:
+          - condition: template
+            value_template: "{{ base_response.list_name == 'Reminders' }}"
+        then:
+          - variables:
+              canvas_events: >-
+                {{ state_attr('sensor.canvas_student_assignments_28_days', 'events')
+                   | default([], true) }}
+              reminder_items: "{{ base_response.items | default([], true) }}"
+              reminder_deadlines: "{{ base_response.deadlines | default([], true) }}"
+
+          - variables:
+              combined_rows: >-
+                {% set ns = namespace(urgent=[], reminders=[], upcoming=[], completed=[]) %}
+
+                {# Canvas rows. #}
+                {% for e in canvas_events | sort(attribute='start') %}
+                  {% set desc = e.description | default('', true) %}
+                  {% set url = e.location | default('', true) %}
+                  {% set completed =
+                      'Status: graded' in desc
+                      or 'Status: submitted' in desc
+                      or 'Status: pending_review' in desc
+                      or 'Submitted:' in desc %}
+                  {% set missing = 'Missing: yes' in desc %}
+                  {% set late = 'Late: yes' in desc %}
+                  {% set excused = 'Excused: yes' in desc %}
+                  {% set dt = as_local(as_datetime(e.start)) %}
+                  {% set due_label = dt.strftime('%a %-m/%-d %-I:%M %p') %}
+
+                  {% if missing or late %}
+                    {% set section = 'urgent' %}
+                    {% set status = 'needs_action' %}
+                    {% set label = ('MISSING · ' if missing else 'LATE · ') ~ due_label %}
+                  {% elif completed or excused %}
+                    {% set section = 'completed' %}
+                    {% set status = 'completed' %}
+                    {% set label = dt.strftime('%a %-m/%-d') %}
+                  {% else %}
+                    {% set section = 'upcoming' %}
+                    {% set status = 'needs_action' %}
+                    {% set label = due_label %}
+                  {% endif %}
+
+                  {% set row = {
+                    'item': {
+                      'summary': e.summary | default('Canvas assignment', true),
+                      'uid': 'canvas:' ~ section ~ ':' ~ url,
+                      'status': status
+                    },
+                    'deadline': label
+                  } %}
+
+                  {% if section == 'urgent' %}
+                    {% set ns.urgent = ns.urgent + [row] %}
+                  {% elif section == 'completed' %}
+                    {% set ns.completed = ns.completed + [row] %}
+                  {% else %}
+                    {% set ns.upcoming = ns.upcoming + [row] %}
+                  {% endif %}
+                {% endfor %}
+
+                {# Super Productivity reminders. Completed reminders move to
+                   the de-emphasized Completed section but remain toggleable. #}
+                {% for item in reminder_items %}
+                  {% set i = loop.index0 %}
+                  {% set deadline = reminder_deadlines[i]
+                      if i < (reminder_deadlines | count) else '' %}
+                  {% set row = {'item': item, 'deadline': deadline} %}
+                  {% if item.status | default('needs_action') == 'completed' %}
+                    {% set ns.completed = ns.completed + [row] %}
+                  {% else %}
+                    {% set ns.reminders = ns.reminders + [row] %}
+                  {% endif %}
+                {% endfor %}
+
+                {{ ns.urgent + ns.reminders + ns.upcoming + ns.completed }}
+
+          - variables:
+              combined_items: >-
+                {% set ns = namespace(values=[]) %}
+                {% for row in combined_rows %}
+                  {% set ns.values = ns.values + [row.item] %}
+                {% endfor %}
+                {{ ns.values }}
+              combined_deadlines: >-
+                {% set ns = namespace(values=[]) %}
+                {% for row in combined_rows %}
+                  {% set ns.values = ns.values + [row.deadline] %}
+                {% endfor %}
+                {{ ns.values }}
+              dashboard_response:
+                list_name: Coming up
+                todo_entity: "{{ base_response.todo_entity }}"
+                items: "{{ combined_items }}"
+                deadlines: "{{ combined_deadlines }}"
+
+          - stop: Return combined daytime dashboard
+            response_variable: dashboard_response
+
+        else:
+          - stop: Return routine dashboard unchanged
+            response_variable: base_response
