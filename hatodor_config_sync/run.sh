@@ -19,15 +19,6 @@ cp /managed/packages/school_dashboard.yaml \
 cp /managed/esphome/reterminal-e1001-morning.yaml \
     "$HA_CONFIG/esphome/reterminal-e1001-morning.yaml"
 
-# The green button uses an interrupt-backed pulse counter so individual presses
-# are accumulated asynchronously even while the e-paper refresh blocks the main
-# loop. Poll the accumulated total at 75 ms rather than 20 ms to reduce idle CPU
-# activity while retaining effectively immediate human-button response.
-ESP_CONFIG="$HA_CONFIG/esphome/reterminal-e1001-morning.yaml"
-if grep -Fq '    update_interval: 20ms' "$ESP_CONFIG"; then
-    sed -i 's/    update_interval: 20ms/    update_interval: 75ms/' "$ESP_CONFIG"
-fi
-
 chmod 0644 \
     "$HA_CONFIG/packages/morning_dashboard.yaml" \
     "$HA_CONFIG/packages/school_dashboard.yaml" \

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.0
+
+- Add Home Assistant helpers and friendly show/hide scripts for a full-screen
+  Message of the Day.
+- Support automatically wrapped text messages and runtime-downloaded PNG photos
+  without reflashing the E1001.
+- Make the green button dismiss the current MOTD and automatically show a new
+  revision when its ID, type, text, or image path changes; dismissal survives a
+  device reboot without storing the message itself in flash.
+- Keep polling checklist data behind the overlay and return to the current list
+  immediately when the MOTD is dismissed or disabled.
+- Preserve MOTD state through the daytime Canvas response wrapper.
+- Correct the ESPHome minimum version to 2025.12.0, the first supported release
+  for the existing Home Assistant-specific API connection check.
+- Use ESP-IDF for verified HTTPS image downloads, and make the existing 75 ms
+  green-button polling interval authoritative in the managed ESPHome source.
+- Extend Config Sync checks to cover managed-file deployment, MOTD wiring, and
+  the existing Super Productivity deadline mapping.
+
+## 0.5.0
+
+- Add a daytime combined view of Super Productivity reminders and Canvas
+  assignments, including priority sections and QR-code assignment links.
+- Preserve the Morning and Evening checklist behavior and the 0.4.0 deadline
+  semantics in the combined dashboard response.
+
 ## 0.4.0
 
 - Map Home Assistant's generic TodoItem `due` field to Super Productivity's

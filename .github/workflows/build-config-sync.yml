@@ -86,7 +86,23 @@ jobs:
             hatodor_config_sync/managed/packages/morning_dashboard.yaml \
             "$target/packages/morning_dashboard.yaml"
           cmp \
+            hatodor_config_sync/managed/packages/school_dashboard.yaml \
+            "$target/packages/school_dashboard.yaml"
+          cmp \
             hatodor_config_sync/managed/esphome/reterminal-e1001-morning.yaml \
+            "$target/esphome/reterminal-e1001-morning.yaml"
+
+          grep -Fq 'dashboard_show_motd:' \
+            "$target/packages/morning_dashboard.yaml"
+          grep -Fq 'dashboard_motd_image_url:' \
+            "$target/packages/morning_dashboard.yaml"
+          grep -Fq 'motd: "{{ base_response.motd }}"' \
+            "$target/packages/school_dashboard.yaml"
+          grep -Fq 'id(motd_dismissed_hash) = id(motd_hash);' \
+            "$target/esphome/reterminal-e1001-morning.yaml"
+          grep -Fq 'action: script.dashboard_get_combined_items' \
+            "$target/esphome/reterminal-e1001-morning.yaml"
+          grep -Fq 'interval: 30s' \
             "$target/esphome/reterminal-e1001-morning.yaml"
 
           grep -Fq \
@@ -117,3 +133,18 @@ jobs:
             "$(sha256sum "$target/custom_components/super_productivity/coordinator.py")"
           test "$todo_before" = \
             "$(sha256sum "$target/custom_components/super_productivity/todo.py")"
+
+      - name: Compile ESPHome configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$(mktemp -d)"
+          cp \
+            hatodor_config_sync/managed/esphome/reterminal-e1001-morning.yaml \
+            "$target/dashboard.yaml"
+          cp hatodor_config_sync/tests/secrets.yaml "$target/secrets.yaml"
+
+          docker run --rm \
+            -v "$target:/config" \
+            ghcr.io/esphome/esphome:2025.12.0 \
+            compile /config/dashboard.yaml

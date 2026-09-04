@@ -1,11 +1,14 @@
 substitutions:
   device_name: reterminal-e1001-morning
   friendly_name: Daily Dashboard
+  # Used only when the MOTD image helper contains a /local/... path. Change
+  # this if Home Assistant is not reachable by this address from the E1001.
+  home_assistant_url: http://homeassistant.local:8123
 
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  min_version: 2025.10.0
+  min_version: 2025.12.0
   on_boot:
     priority: -100
     then:
@@ -20,7 +23,9 @@ esphome:
 esp32:
   board: esp32-s3-devkitc-1
   framework:
-    type: arduino
+    # ESP-IDF lets the runtime image client verify HTTPS certificates. The
+    # Arduino framework would require disabling TLS verification globally.
+    type: esp-idf
 
 logger:
   hardware_uart: UART0
@@ -48,6 +53,14 @@ wifi:
 
 captive_portal:
 
+psram:
+  mode: octal
+  speed: 80MHz
+
+http_request:
+  useragent: hatodor-e1001
+  timeout: 15s
+
 spi:
   clk_pin: GPIO7
   mosi_pin: GPIO9
@@ -65,6 +78,45 @@ font:
   - file: "gfonts://Inter@400"
     id: font_small
     size: 18
+  - file: "gfonts://Inter@700"
+    id: font_motd_large
+    size: 52
+  - file: "gfonts://Inter@600"
+    id: font_motd_medium
+    size: 40
+  - file: "gfonts://Inter@500"
+    id: font_motd_small
+    size: 30
+
+# PNG is used as the one runtime format so changing the picture never requires
+# compiling firmware. The BINARY type converts it for the E1001's 1-bit panel;
+# pre-dithered 800x480 PNGs give the best photographic result.
+online_image:
+  - id: motd_image
+    url: "http://127.0.0.1/hatodor-motd-placeholder.png"
+    format: PNG
+    type: BINARY
+    resize: 800x480
+    buffer_size: 32768
+    update_interval: never
+    on_download_finished:
+      - lambda: |-
+          id(motd_image_ready) = true;
+          id(motd_image_error) = false;
+      - if:
+          condition:
+            lambda: 'return id(motd_visible) && id(motd_type) == "image";'
+          then:
+            - script.execute: redraw_display
+    on_error:
+      - lambda: |-
+          id(motd_image_ready) = false;
+          id(motd_image_error) = true;
+      - if:
+          condition:
+            lambda: 'return id(motd_visible) && id(motd_type) == "image";'
+          then:
+            - script.execute: redraw_display
 
 qr_code:
   - id: assignment_qr
@@ -133,6 +185,58 @@ globals:
     restore_value: no
     initial_value: '""'
 
+  - id: motd_visible
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: motd_type
+    type: std::string
+    restore_value: no
+    initial_value: '"text"'
+
+  - id: motd_text
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+  - id: motd_image_url
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+  - id: motd_key
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+  - id: motd_hash
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+
+  # Persist only a small content hash, not the message or URL. This keeps a
+  # dismissed revision hidden across a device reboot without storing user text.
+  - id: motd_dismissed_hash
+    type: uint32_t
+    restore_value: yes
+    initial_value: '0'
+
+  - id: motd_image_ready
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: motd_image_error
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: motd_image_needs_download
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
 display:
   - platform: waveshare_epaper
     id: epaper_display
@@ -162,6 +266,121 @@ display:
       const int max_visible = 8;
       const int row_height = 43;
       const int first_row_y = 78;
+
+      // A Home Assistant-controlled MOTD takes over the panel without
+      // discarding the checklist data that continues to sync underneath it.
+      if (id(motd_visible)) {
+        if (id(motd_type) == "image") {
+          if (id(motd_image_ready)) {
+            const int image_width = id(motd_image).get_width();
+            const int image_height = id(motd_image).get_height();
+            it.image((width - image_width) / 2,
+                     (480 - image_height) / 2,
+                     id(motd_image));
+          } else {
+            const char *status = id(motd_image_url).empty()
+                ? "Set a PNG image URL in Home Assistant"
+                : (id(motd_image_error)
+                    ? "Could not load the MOTD image"
+                    : "Loading message image...");
+            it.printf(width / 2, 205, id(font_item), TextAlign::TOP_CENTER,
+                      "%s", status);
+          }
+
+          if (!id(motd_text).empty()) {
+            std::string caption = id(motd_text);
+            if (caption.size() > 74) {
+              caption = caption.substr(0, 71) + "...";
+            }
+            it.filled_rectangle(0, 392, width, 88, COLOR_OFF);
+            it.line(0, 392, width, 392, COLOR_ON);
+            it.printf(width / 2, 405, id(font_small), TextAlign::TOP_CENTER,
+                      "%s", caption.c_str());
+          }
+
+          it.filled_rectangle(613, 451, 187, 29, COLOR_OFF);
+          it.printf(790, 457, id(font_small), TextAlign::TOP_RIGHT,
+                    "GREEN = dismiss");
+          return;
+        }
+
+        auto wrap_text = [&](esphome::display::BaseFont *font,
+                             int max_width) {
+          std::vector<std::string> lines;
+          std::string current;
+          std::string word;
+
+          auto text_width = [&](const std::string &value) {
+            int x1, y1, measured_width, measured_height;
+            it.get_text_bounds(0, 0, value.c_str(), font,
+                               TextAlign::TOP_LEFT,
+                               &x1, &y1, &measured_width, &measured_height);
+            return measured_width;
+          };
+
+          auto append_word = [&]() {
+            if (word.empty()) return;
+            std::string candidate = current.empty()
+                ? word
+                : current + " " + word;
+            if (!current.empty() && text_width(candidate) > max_width) {
+              lines.push_back(current);
+              current = word;
+            } else {
+              current = candidate;
+            }
+            word.clear();
+          };
+
+          for (char ch : id(motd_text)) {
+            if (ch == '\n') {
+              append_word();
+              lines.push_back(current);
+              current.clear();
+            } else if (ch == ' ' || ch == '\t' || ch == '\r') {
+              append_word();
+            } else {
+              word.push_back(ch);
+            }
+          }
+          append_word();
+          if (!current.empty() || lines.empty()) lines.push_back(current);
+          return lines;
+        };
+
+        if (id(motd_text).empty()) {
+          it.printf(width / 2, 205, id(font_item), TextAlign::TOP_CENTER,
+                    "Set message text in Home Assistant");
+          it.printf(790, 457, id(font_small), TextAlign::TOP_RIGHT,
+                    "GREEN = dismiss");
+          return;
+        }
+
+        esphome::display::BaseFont *motd_font = id(font_motd_large);
+        int line_height = 64;
+        std::vector<std::string> lines = wrap_text(motd_font, 720);
+        if ((int) lines.size() * line_height > 350) {
+          motd_font = id(font_motd_medium);
+          line_height = 50;
+          lines = wrap_text(motd_font, 720);
+        }
+        if ((int) lines.size() * line_height > 350) {
+          motd_font = id(font_motd_small);
+          line_height = 38;
+          lines = wrap_text(motd_font, 720);
+        }
+
+        const int block_height = lines.size() * line_height;
+        int y = std::max(38, (480 - block_height) / 2);
+        for (const std::string &line : lines) {
+          it.printf(width / 2, y, motd_font, TextAlign::TOP_CENTER,
+                    "%s", line.c_str());
+          y += line_height;
+        }
+        it.printf(790, 457, id(font_small), TextAlign::TOP_RIGHT,
+                  "GREEN = dismiss");
+        return;
+      }
 
       // Assignment detail view. The QR component is updated dynamically when
       // green is pressed on a Canvas row.
@@ -354,7 +573,7 @@ sensor:
     count_mode:
       rising_edge: DISABLE
       falling_edge: INCREMENT
-    update_interval: 20ms
+    update_interval: 75ms
     internal: true
     total:
       id: green_button_total
@@ -372,6 +591,15 @@ sensor:
               const int presses = current - id(green_seen_pulses);
               if (presses <= 0) return;
               id(green_seen_pulses) = current;
+
+              // Dismiss only this exact MOTD revision. A changed type, text,
+              // image URL, or explicit revision automatically appears again.
+              if (id(motd_visible)) {
+                id(motd_dismissed_hash) = id(motd_hash);
+                id(motd_visible) = false;
+                id(redraw_completion_batch)->execute();
+                return;
+              }
 
               // Any green press closes the QR detail view.
               if (id(qr_mode)) {
@@ -434,6 +662,7 @@ binary_sensor:
       - delayed_on: 20ms
     on_press:
       - lambda: |-
+          if (id(motd_visible)) return;
           if (id(qr_mode)) id(qr_mode) = false;
           const int n = id(checklist_titles).size();
           if (n == 0) return;
@@ -455,6 +684,7 @@ binary_sensor:
       - delayed_on: 20ms
     on_press:
       - lambda: |-
+          if (id(motd_visible)) return;
           if (id(qr_mode)) id(qr_mode) = false;
           const int n = id(checklist_titles).size();
           if (n == 0) return;
@@ -518,6 +748,8 @@ script:
                           response["response"]["items"].as<JsonArrayConst>();
                       JsonArrayConst deadlines =
                           response["response"]["deadlines"].as<JsonArrayConst>();
+                      JsonObjectConst motd =
+                          response["response"]["motd"].as<JsonObjectConst>();
 
                       if (items.isNull()) {
                         ESP_LOGW("dashboard", "Checklist response did not contain an items array");
@@ -536,6 +768,52 @@ script:
                       std::vector<std::string> new_uids;
                       std::vector<bool> new_done;
                       std::vector<std::string> new_deadlines;
+
+                      const bool new_motd_enabled =
+                          !motd.isNull() && (motd["enabled"] | false);
+                      const char *raw_motd_type = motd["type"] | "text";
+                      const char *raw_motd_text = motd["text"] | "";
+                      const char *raw_motd_image_url = motd["image_url"] | "";
+                      const char *raw_motd_id = motd["id"] | "";
+
+                      std::string new_motd_type(raw_motd_type);
+                      std::string new_motd_text(raw_motd_text);
+                      std::string new_motd_image_url(raw_motd_image_url);
+                      if (!new_motd_image_url.empty() &&
+                          new_motd_image_url[0] == '/') {
+                        new_motd_image_url =
+                            std::string("${home_assistant_url}") +
+                            new_motd_image_url;
+                      }
+                      const std::string new_motd_key =
+                          std::string(raw_motd_id) + "\x1f" + new_motd_type +
+                          "\x1f" + new_motd_text + "\x1f" +
+                          new_motd_image_url;
+                      uint32_t new_motd_hash = 2166136261UL;
+                      for (const unsigned char ch : new_motd_key) {
+                        new_motd_hash ^= ch;
+                        new_motd_hash *= 16777619UL;
+                      }
+                      if (new_motd_hash == 0) new_motd_hash = 1;
+
+                      if (!new_motd_enabled) {
+                        // Turning the helper off resets the local dismissal,
+                        // so turning it on later is a fresh presentation.
+                        id(motd_dismissed_hash) = 0;
+                      }
+                      const bool new_motd_visible =
+                          new_motd_enabled &&
+                          new_motd_hash != id(motd_dismissed_hash);
+                      const bool image_url_changed =
+                          new_motd_image_url != id(motd_image_url);
+                      const bool presentation_changed =
+                          new_motd_visible &&
+                          (!id(motd_visible) ||
+                           new_motd_key != id(motd_key));
+                      const bool should_download_image =
+                          new_motd_visible && new_motd_type == "image" &&
+                          !new_motd_image_url.empty() &&
+                          (image_url_changed || presentation_changed);
 
                       size_t raw_index = 0;
                       for (JsonObjectConst item : items) {
@@ -572,7 +850,11 @@ script:
                           (new_uids != id(checklist_uids)) ||
                           (new_done != id(checklist_done)) ||
                           (new_deadlines != id(checklist_deadlines)) ||
-                          (new_selection != id(selected_index));
+                          (new_selection != id(selected_index)) ||
+                          (new_motd_visible != id(motd_visible)) ||
+                          (new_motd_type != id(motd_type)) ||
+                          (new_motd_text != id(motd_text)) ||
+                          image_url_changed;
 
                       id(active_list_name) = std::move(new_list_name);
                       id(active_todo_entity) = std::move(new_todo_entity);
@@ -581,7 +863,27 @@ script:
                       id(checklist_done) = std::move(new_done);
                       id(checklist_deadlines) = std::move(new_deadlines);
                       id(selected_index) = new_selection;
+                      id(motd_visible) = new_motd_visible;
+                      id(motd_type) = std::move(new_motd_type);
+                      id(motd_text) = std::move(new_motd_text);
+                      id(motd_image_url) = std::move(new_motd_image_url);
+                      id(motd_key) = new_motd_key;
+                      id(motd_hash) = new_motd_hash;
+                      id(motd_image_needs_download) = should_download_image;
+                      if (image_url_changed || should_download_image) {
+                        id(motd_image_ready) = false;
+                        id(motd_image_error) = false;
+                      }
                       id(checklist_changed) = changed;
+
+                  - if:
+                      condition:
+                        lambda: 'return id(motd_image_needs_download);'
+                      then:
+                        - lambda: 'id(motd_image_needs_download) = false;'
+                        - online_image.set_url:
+                            id: motd_image
+                            url: !lambda 'return id(motd_image_url);'
 
                   - if:
                       condition:

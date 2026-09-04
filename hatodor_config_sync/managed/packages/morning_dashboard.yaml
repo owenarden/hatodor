@@ -37,10 +37,37 @@ input_boolean:
     name: Dashboard times initialized
     icon: mdi:check-clock
 
+  dashboard_motd_enabled:
+    name: Dashboard message of the day
+    icon: mdi:message-text
+
+input_select:
+  dashboard_motd_type:
+    name: Dashboard message type
+    icon: mdi:format-list-bulleted-type
+    options:
+      - Text
+      - Image
+
 input_text:
   dashboard_last_rollover_day:
     name: Dashboard last rollover day
     max: 10
+
+  dashboard_motd_text:
+    name: Dashboard message text
+    icon: mdi:card-text
+    max: 255
+
+  dashboard_motd_image_url:
+    name: Dashboard message image URL or path
+    icon: mdi:image
+    max: 255
+
+  dashboard_motd_id:
+    name: Dashboard message revision
+    icon: mdi:identifier
+    max: 80
 
 script:
   morning_dashboard_get_items:
@@ -103,6 +130,12 @@ script:
             todo_entity: "{{ source_entity }}"
             items: "{{ todo_data[source_entity]['items'] | default([]) }}"
             deadlines: "{{ deadline_labels }}"
+            motd:
+              enabled: "{{ is_state('input_boolean.dashboard_motd_enabled', 'on') }}"
+              type: "{{ states('input_select.dashboard_motd_type') | lower }}"
+              text: "{{ states('input_text.dashboard_motd_text') }}"
+              image_url: "{{ states('input_text.dashboard_motd_image_url') }}"
+              id: "{{ states('input_text.dashboard_motd_id') }}"
 
       - stop: Return the active dashboard checklist
         response_variable: dashboard_response
@@ -164,6 +197,72 @@ script:
         data:
           item: "{{ uid }}"
           status: "{{ status }}"
+
+  dashboard_show_motd:
+    alias: Dashboard - show message of the day
+    description: >-
+      Show a full-screen text message or PNG image. Calling this script always
+      creates a new revision, so a message dismissed on the E1001 is shown again.
+    mode: restart
+    fields:
+      motd_type:
+        name: Message type
+        required: true
+        default: Text
+        selector:
+          select:
+            options:
+              - Text
+              - Image
+      text:
+        name: Message or image caption
+        required: false
+        selector:
+          text:
+            multiline: true
+      image_url:
+        name: PNG URL or /local path
+        description: >-
+          For Image messages, use a full URL or a path such as
+          /local/hatodor/motd.png.
+        required: false
+        selector:
+          text:
+    sequence:
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.dashboard_motd_type
+        data:
+          option: "{{ motd_type }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dashboard_motd_text
+        data:
+          value: >-
+            {{ text | default('', true) | string | truncate(255, true, '') }}
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dashboard_motd_image_url
+        data:
+          value: >-
+            {{ image_url | default('', true) | string | truncate(255, true, '') }}
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dashboard_motd_id
+        data:
+          value: "{{ now().isoformat() }}"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.dashboard_motd_enabled
+
+  dashboard_hide_motd:
+    alias: Dashboard - hide message of the day
+    description: Hide the full-screen message and return the E1001 to its checklist.
+    mode: restart
+    sequence:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.dashboard_motd_enabled
 
   dashboard_reset_daily_deadlines:
     alias: Dashboard - reset daily deadlines
