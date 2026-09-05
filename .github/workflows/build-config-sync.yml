@@ -112,8 +112,8 @@ jobs:
           cmp \
             hatodor_config_sync/managed/hatodor/cat_sayings.json \
             "$target/hatodor/cat_sayings.json"
-          test "$(cat "$target/hatodor/thecatapi_key")" = "test-secret-key"
-          test "$(stat -c '%a' "$target/hatodor/thecatapi_key")" = "600"
+          test "$(sudo cat "$target/hatodor/thecatapi_key")" = "test-secret-key"
+          test "$(sudo stat -c '%a' "$target/hatodor/thecatapi_key")" = "600"
 
           grep -Fq 'dashboard_show_motd:' \
             "$target/packages/morning_dashboard.yaml"
