@@ -48,6 +48,7 @@ input_select:
     options:
       - Text
       - Image
+      - Carousel
 
 input_text:
   dashboard_last_rollover_day:
@@ -69,7 +70,16 @@ input_text:
     icon: mdi:identifier
     max: 80
 
+  dashboard_morning_motd_day:
+    name: Dashboard morning message day
+    icon: mdi:weather-sunset-up
+    max: 10
+
 shell_command:
+  dashboard_fetch_zenquote: >-
+    python3 /config/hatodor/fetch_zenquote.py
+    '{{ dashboard_day | base64_encode }}'
+
   dashboard_render_cat_motd: >-
     python3 /config/hatodor/render_cat_motd.py
     '{{ image_url | base64_encode }}'
@@ -319,6 +329,146 @@ script:
           text: ""
           image_url: "{{ rendered_cat['local_url'] }}"
 
+  dashboard_start_morning_motd:
+    alias: Dashboard - start morning message
+    description: >-
+      Show Maggie's daily good-morning ZenQuote and reset the locked cat page.
+      The bed-pressure automation unlocks the cat page after she gets up.
+    mode: restart
+    sequence:
+      - variables:
+          dashboard_day: "{{ now().date().isoformat() }}"
+
+      - action: shell_command.dashboard_fetch_zenquote
+        data:
+          dashboard_day: "{{ dashboard_day }}"
+        response_variable: zenquote_result
+
+      - variables:
+          morning_message: >-
+            {% if zenquote_result['returncode'] | int == 0 %}
+              {{ (zenquote_result['stdout'] | from_json)['text'] }}
+            {% else %}
+              Good morning, Maggie!
+
+              Begin gently. The day does not need to be conquered all at once.
+
+              - Hatodor
+            {% endif %}
+
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.dashboard_motd_type
+        data:
+          option: Carousel
+
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dashboard_motd_text
+        data:
+          value: "{{ morning_message | string | truncate(255, true, '') }}"
+
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dashboard_motd_image_url
+        data:
+          value: ""
+
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dashboard_motd_id
+        data:
+          value: "morning-{{ dashboard_day }}"
+
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dashboard_morning_motd_day
+        data:
+          value: "{{ dashboard_day }}"
+
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.dashboard_motd_enabled
+
+      - if:
+          - condition: state
+            entity_id: binary_sensor.maggie_s_room_pressure_sensor_presence
+            state: "off"
+        then:
+          - action: script.dashboard_unlock_morning_cat
+
+  dashboard_unlock_morning_cat:
+    alias: Dashboard - unlock morning cat
+    description: >-
+      Prepare the daily cat photo and add it as the second morning-message page
+      without changing the current morning revision or dismissal state.
+    mode: single
+    fields:
+      tone:
+        name: Cat attitude
+        required: false
+        default: Mixed
+        selector:
+          select:
+            options:
+              - Mixed
+              - Dry
+              - Chaotic
+              - Encouraging
+              - Tiny dictator
+      image_url:
+        name: Cat photo source
+        required: false
+        default: >-
+          https://api.thecatapi.com/v1/images/search?size=full&mime_types=jpg,png&format=json&has_breeds=true&order=RANDOM&limit=1
+        selector:
+          text:
+    sequence:
+      - condition: state
+        entity_id: input_boolean.dashboard_motd_enabled
+        state: "on"
+
+      - condition: state
+        entity_id: input_select.dashboard_motd_type
+        state: Carousel
+
+      - condition: template
+        value_template: >-
+          {{ states('input_text.dashboard_motd_image_url') in
+             ['', 'unknown', 'unavailable'] }}
+
+      - variables:
+          dashboard_day: "{{ now().date().isoformat() }}"
+          selected_tone: "{{ tone | default('Mixed', true) }}"
+          selected_image_url: >-
+            {{ image_url | default(
+              'https://api.thecatapi.com/v1/images/search?size=full&mime_types=jpg,png&format=json&has_breeds=true&order=RANDOM&limit=1',
+              true) }}
+
+      - action: shell_command.dashboard_render_cat_motd
+        data:
+          image_url: "{{ selected_image_url }}"
+          tone: "{{ selected_tone }}"
+          dashboard_day: "{{ dashboard_day }}"
+        response_variable: morning_cat_render
+
+      - if:
+          - condition: template
+            value_template: "{{ morning_cat_render['returncode'] | int != 0 }}"
+        then:
+          - stop: >-
+              Could not prepare the morning cat: {{ morning_cat_render['stderr'] | trim }}
+            error: true
+
+      - variables:
+          rendered_morning_cat: "{{ morning_cat_render['stdout'] | from_json }}"
+
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.dashboard_motd_image_url
+        data:
+          value: "{{ rendered_morning_cat['local_url'] }}"
+
   dashboard_hide_motd:
     alias: Dashboard - hide message of the day
     description: Hide the full-screen message and return the E1001 to its checklist.
@@ -525,6 +675,7 @@ automation:
 
       - variables:
           rollover_time: "{{ states('input_datetime.dashboard_daily_rollover') }}"
+          morning_end_time: "{{ states('input_datetime.dashboard_morning_end') }}"
           now_time: "{{ now().strftime('%H:%M:%S') }}"
 
       - variables:
@@ -542,3 +693,40 @@ automation:
                  != (expected_rollover_day | trim) }}
         then:
           - action: script.dashboard_daily_rollover
+
+      - if:
+          - condition: template
+            value_template: >-
+              {{ now_time >= rollover_time
+                 and now_time < morning_end_time
+                 and states('input_text.dashboard_morning_motd_day')
+                     != (expected_rollover_day | trim) }}
+        then:
+          - action: script.dashboard_start_morning_motd
+
+  - id: dashboard_unlock_cat_after_bed_exit
+    alias: Dashboard - unlock cat after getting out of bed
+    description: >-
+      Add and display the cat page after Maggie's pressure sensor has remained
+      clear for 30 seconds during the morning routine window.
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.maggie_s_room_pressure_sensor_presence
+        from: "on"
+        to: "off"
+        for: "00:00:30"
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set now_time = now().strftime('%H:%M:%S') %}
+          {{ now_time >= states('input_datetime.dashboard_daily_rollover')
+             and now_time < states('input_datetime.dashboard_morning_end') }}
+      - condition: state
+        entity_id: input_boolean.dashboard_motd_enabled
+        state: "on"
+      - condition: state
+        entity_id: input_select.dashboard_motd_type
+        state: Carousel
+    actions:
+      - action: script.dashboard_unlock_morning_cat

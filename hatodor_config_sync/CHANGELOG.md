@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.0
+
+- Start each morning with a cached ZenQuotes quote beneath a personalized
+  `Good morning, Maggie!` greeting, including visible `zenquotes.io` attribution.
+- Watch `binary_sensor.maggie_s_room_pressure_sensor_presence` and unlock the
+  daily cat page after the sensor remains clear for 30 seconds.
+- Automatically move from the ZenQuote to the freshly rendered cat when it is
+  unlocked, then let either white arrow button switch between the two pages.
+- Keep green dedicated to dismissing the entire morning experience and opening
+  the current routine checklist; a late cat result cannot reopen a dismissed day.
+- Cache one ZenQuotes response per dashboard day and reuse the last cached quote
+  during a temporary API outage.
+
 ## 0.8.0
 
 - Use The Cat API's much larger breed-photo feed as the recommended source,

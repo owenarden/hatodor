@@ -1,5 +1,5 @@
 name: "Hatodor Config Sync"
-version: "0.8.0"
+version: "0.9.0"
 slug: "hatodor_config_sync"
 description: >-
   Installs the Hatodor-managed Home Assistant packages and ESPHome configuration

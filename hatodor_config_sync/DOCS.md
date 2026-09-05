@@ -8,6 +8,7 @@ On install, start, or update it writes these repository-managed files:
 - `/config/packages/morning_dashboard.yaml`
 - `/config/esphome/reterminal-e1001-morning.yaml`
 - `/config/hatodor/render_cat_motd.py`
+- `/config/hatodor/fetch_zenquote.py`
 
 On its first run only, it also creates the user-editable file
 `/config/hatodor/cat_sayings.json`. Later Config Sync runs preserve that file.
@@ -42,6 +43,7 @@ Config Sync creates these Home Assistant helpers:
 - `input_text.dashboard_motd_text`
 - `input_text.dashboard_motd_image_url`
 - `input_text.dashboard_motd_id`
+- `input_text.dashboard_morning_motd_day`
 
 The easiest way to publish a message is to run
 `script.dashboard_show_motd` from Home Assistant. Choose **Text** or **Image**,
@@ -56,6 +58,32 @@ display to its current checklist. The E1001 continues its normal 30-second data
 sync while the overlay is visible, and pressing the green button dismisses only
 the current revision. That dismissal survives an E1001 reboot; changed content,
 a new revision, or disabling and re-enabling the MOTD makes it visible again.
+
+### Morning experience
+
+At the configured 04:00 dashboard rollover, Hatodor starts a new daily carousel
+on the text page. It says **Good morning, Maggie!**, shows the ZenQuotes quote
+of the day and author, and includes `zenquotes.io` attribution. A Home Assistant
+restart during the Morning Routine window catches up only if that day's morning
+message has not already been initialized.
+
+The quote is fetched at most once per dashboard day and cached in
+`/config/hatodor/zenquote_cache.json`. If ZenQuotes is temporarily unavailable,
+Hatodor reuses the most recent cached quote. If no cache exists, it uses a short
+bundled good-morning message so the display still starts normally.
+
+The cat page begins locked. When
+`binary_sensor.maggie_s_room_pressure_sensor_presence` changes from `on` to
+`off` and stays clear for 30 seconds during the Morning Routine window, Home
+Assistant renders the day's cat and the E1001 automatically moves to it. After
+that, either white arrow button switches between the ZenQuote and cat pages.
+The green button dismisses the entire morning carousel and opens the current
+Morning Routine checklist. If green is pressed before the cat finishes, the
+late image does not reopen the dismissed carousel.
+
+For manual testing, run **Dashboard - start morning message**, followed by
+**Dashboard - unlock morning cat**. The normal pressure-sensor automation calls
+the second action automatically.
 
 ### Local images
 
@@ -200,8 +228,8 @@ device, normally OTA from ESPHome Builder.
 For a release that changes only the ESPHome YAML, a Home Assistant restart is
 not otherwise required.
 
-Version 0.8.0 includes the 0.7.1 ESPHome loading-refresh fix and switches the
-recommended photo source to The Cat API. Before starting the updated App, enter
-your free key in its **The Cat API key** configuration field. Run Config Sync,
-restart Home Assistant to reload the action definition, then install the E1001
-firmware wirelessly from ESPHome Builder.
+Version 0.9.0 adds the automatic ZenQuote-to-cat morning carousel, the Maggie's
+bed-pressure trigger, and arrow-button page navigation. Before starting the
+updated App, enter your free key in its **The Cat API key** configuration field.
+Run Config Sync, restart Home Assistant to load the new helpers, scripts, and
+automations, then install the E1001 firmware wirelessly from ESPHome Builder.

@@ -45,6 +45,13 @@ and Mixed tone choices are included. User edits to
 The free The Cat API key is entered in Config Sync's password-style App setting
 and is not exposed through a Home Assistant entity.
 
+The morning MOTD is a two-page experience. At the daily rollover it opens with
+**Good morning, Maggie!** and the cached ZenQuotes quote of the day. After
+`binary_sensor.maggie_s_room_pressure_sensor_presence` remains clear for 30
+seconds, Hatodor prepares a fresh cat, unlocks that page, and moves to it
+automatically. Either white arrow button switches between the ZenQuote and cat;
+green dismisses both and reveals the Morning Routine checklist.
+
 `packages/school_dashboard.yaml` expects the Canvas helper sensor
 `sensor.canvas_student_assignments_28_days` to exist.
 

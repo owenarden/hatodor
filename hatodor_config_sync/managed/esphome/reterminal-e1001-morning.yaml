@@ -105,7 +105,10 @@ online_image:
           id(motd_image_error) = false;
       - if:
           condition:
-            lambda: 'return id(motd_visible) && id(motd_type) == "image";'
+            lambda: |-
+              return id(motd_visible) &&
+                     (id(motd_type) == "image" ||
+                      (id(motd_type) == "carousel" && id(motd_page) == 1));
           then:
             - script.execute: redraw_display
     on_error:
@@ -114,7 +117,10 @@ online_image:
           id(motd_image_error) = true;
       - if:
           condition:
-            lambda: 'return id(motd_visible) && id(motd_type) == "image";'
+            lambda: |-
+              return id(motd_visible) &&
+                     (id(motd_type) == "image" ||
+                      (id(motd_type) == "carousel" && id(motd_page) == 1));
           then:
             - script.execute: redraw_display
 
@@ -237,6 +243,12 @@ globals:
     restore_value: no
     initial_value: 'false'
 
+  # Carousel page 0 is the good-morning ZenQuote; page 1 is the cat photo.
+  - id: motd_page
+    type: int
+    restore_value: no
+    initial_value: '0'
+
 display:
   - platform: waveshare_epaper
     id: epaper_display
@@ -270,7 +282,12 @@ display:
       // A Home Assistant-controlled MOTD takes over the panel without
       // discarding the checklist data that continues to sync underneath it.
       if (id(motd_visible)) {
-        if (id(motd_type) == "image") {
+        const bool motd_carousel = id(motd_type) == "carousel";
+        const bool show_motd_image =
+            id(motd_type) == "image" ||
+            (motd_carousel && id(motd_page) == 1 &&
+             !id(motd_image_url).empty());
+        if (show_motd_image) {
           if (id(motd_image_ready)) {
             const int image_width = id(motd_image).get_width();
             const int image_height = id(motd_image).get_height();
@@ -287,7 +304,7 @@ display:
                       "%s", status);
           }
 
-          if (!id(motd_text).empty()) {
+          if (!motd_carousel && !id(motd_text).empty()) {
             std::string caption = id(motd_text);
             if (caption.size() > 74) {
               caption = caption.substr(0, 71) + "...";
@@ -298,9 +315,13 @@ display:
                       "%s", caption.c_str());
           }
 
-          it.filled_rectangle(613, 451, 187, 29, COLOR_OFF);
+          const int footer_width = motd_carousel ? 300 : 187;
+          it.filled_rectangle(width - footer_width, 451,
+                              footer_width, 29, COLOR_OFF);
           it.printf(790, 457, id(font_small), TextAlign::TOP_RIGHT,
-                    "GREEN = dismiss");
+                    "%s", motd_carousel
+                        ? "< > switch | GREEN routine"
+                        : "GREEN = dismiss");
           return;
         }
 
@@ -352,7 +373,9 @@ display:
           it.printf(width / 2, 205, id(font_item), TextAlign::TOP_CENTER,
                     "Set message text in Home Assistant");
           it.printf(790, 457, id(font_small), TextAlign::TOP_RIGHT,
-                    "GREEN = dismiss");
+                    "%s", motd_carousel
+                        ? "Cat unlocks after getting up | GREEN routine"
+                        : "GREEN = dismiss");
           return;
         }
 
@@ -378,7 +401,11 @@ display:
           y += line_height;
         }
         it.printf(790, 457, id(font_small), TextAlign::TOP_RIGHT,
-                  "GREEN = dismiss");
+                  "%s", motd_carousel
+                      ? (id(motd_image_url).empty()
+                          ? "Cat unlocks after getting up | GREEN routine"
+                          : "< > switch | GREEN routine")
+                      : "GREEN = dismiss");
         return;
       }
 
@@ -662,7 +689,14 @@ binary_sensor:
       - delayed_on: 20ms
     on_press:
       - lambda: |-
-          if (id(motd_visible)) return;
+          if (id(motd_visible)) {
+            if (id(motd_type) == "carousel" &&
+                !id(motd_image_url).empty() &&
+                (id(motd_page) == 1 || id(motd_image_ready))) {
+              id(motd_page) = id(motd_page) == 0 ? 1 : 0;
+            }
+            return;
+          }
           if (id(qr_mode)) id(qr_mode) = false;
           const int n = id(checklist_titles).size();
           if (n == 0) return;
@@ -684,7 +718,14 @@ binary_sensor:
       - delayed_on: 20ms
     on_press:
       - lambda: |-
-          if (id(motd_visible)) return;
+          if (id(motd_visible)) {
+            if (id(motd_type) == "carousel" &&
+                !id(motd_image_url).empty() &&
+                (id(motd_page) == 1 || id(motd_image_ready))) {
+              id(motd_page) = id(motd_page) == 0 ? 1 : 0;
+            }
+            return;
+          }
           if (id(qr_mode)) id(qr_mode) = false;
           const int n = id(checklist_titles).size();
           if (n == 0) return;
@@ -785,10 +826,17 @@ script:
                             std::string("${home_assistant_url}") +
                             new_motd_image_url;
                       }
-                      const std::string new_motd_key =
+                      const bool new_motd_carousel =
+                          new_motd_type == "carousel";
+                      std::string new_motd_key =
                           std::string(raw_motd_id) + "\x1f" + new_motd_type +
-                          "\x1f" + new_motd_text + "\x1f" +
-                          new_motd_image_url;
+                          "\x1f" + new_motd_text;
+                      // Unlocking the cat is part of the same daily carousel,
+                      // not a new revision. If green already dismissed that
+                      // morning, the late image must not reopen the overlay.
+                      if (!new_motd_carousel) {
+                        new_motd_key += "\x1f" + new_motd_image_url;
+                      }
                       uint32_t new_motd_hash = 2166136261UL;
                       for (const unsigned char ch : new_motd_key) {
                         new_motd_hash ^= ch;
@@ -806,12 +854,16 @@ script:
                           new_motd_hash != id(motd_dismissed_hash);
                       const bool image_url_changed =
                           new_motd_image_url != id(motd_image_url);
+                      const bool cat_became_available =
+                          new_motd_carousel && id(motd_image_url).empty() &&
+                          !new_motd_image_url.empty();
                       const bool presentation_changed =
                           new_motd_visible &&
                           (!id(motd_visible) ||
                            new_motd_key != id(motd_key));
                       const bool should_download_image =
-                          new_motd_visible && new_motd_type == "image" &&
+                          new_motd_visible &&
+                          (new_motd_type == "image" || new_motd_carousel) &&
                           !new_motd_image_url.empty() &&
                           (image_url_changed || presentation_changed);
 
@@ -869,6 +921,14 @@ script:
                       id(motd_image_url) = std::move(new_motd_image_url);
                       id(motd_key) = new_motd_key;
                       id(motd_hash) = new_motd_hash;
+                      if (!new_motd_carousel || presentation_changed) {
+                        id(motd_page) = 0;
+                      }
+                      if (cat_became_available && new_motd_visible) {
+                        // The pressure sensor has just unlocked the cat. Move
+                        // there automatically; arrows can return to the quote.
+                        id(motd_page) = 1;
+                      }
                       id(motd_image_needs_download) = should_download_image;
                       if (image_url_changed || should_download_image) {
                         id(motd_image_ready) = false;

@@ -24,6 +24,8 @@ cp "$MANAGED_ROOT/esphome/reterminal-e1001-morning.yaml" \
     "$HA_CONFIG/esphome/reterminal-e1001-morning.yaml"
 cp "$MANAGED_ROOT/hatodor/render_cat_motd.py" \
     "$HA_CONFIG/hatodor/render_cat_motd.py"
+cp "$MANAGED_ROOT/hatodor/fetch_zenquote.py" \
+    "$HA_CONFIG/hatodor/fetch_zenquote.py"
 
 # This is deliberately user-owned after its first installation. Config Sync
 # updates the renderer but preserves any sayings the household has edited.
@@ -40,7 +42,9 @@ chmod 0644 \
     "$HA_CONFIG/packages/school_dashboard.yaml" \
     "$HA_CONFIG/esphome/reterminal-e1001-morning.yaml" \
     "$HA_CONFIG/hatodor/cat_sayings.json"
-chmod 0755 "$HA_CONFIG/hatodor/render_cat_motd.py"
+chmod 0755 \
+    "$HA_CONFIG/hatodor/render_cat_motd.py" \
+    "$HA_CONFIG/hatodor/fetch_zenquote.py"
 
 # Keep the photo-service credential in a private file read by the renderer.
 # It is never placed in a Home Assistant entity or passed on the command line.
@@ -65,6 +69,7 @@ echo "Installed Hatodor-managed Home Assistant package: packages/morning_dashboa
 echo "Installed Hatodor-managed Home Assistant package: packages/school_dashboard.yaml"
 echo "Installed Hatodor-managed ESPHome config: esphome/reterminal-e1001-morning.yaml"
 echo "Installed Hatodor cat MOTD renderer: hatodor/render_cat_motd.py"
+echo "Installed Hatodor ZenQuote fetcher: hatodor/fetch_zenquote.py"
 
 # The upstream Super Productivity integration currently fetches its main task
 # list with include_done=False (the API default). That makes a completed project

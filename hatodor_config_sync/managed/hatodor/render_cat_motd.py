@@ -141,7 +141,7 @@ def resolve_image_url(source_url: str, revision: str) -> str:
     request = Request(
         source_url,
         headers={
-            "User-Agent": "Hatodor-MOTD/0.8",
+            "User-Agent": "Hatodor-MOTD/0.9",
             "Accept": "application/json",
             "Cache-Control": "no-cache",
             "x-api-key": load_cat_api_key(),
@@ -161,7 +161,7 @@ def download_image(url: str) -> bytes:
     request = Request(
         url,
         headers={
-            "User-Agent": "Hatodor-MOTD/0.8",
+            "User-Agent": "Hatodor-MOTD/0.9",
             "Accept": "image/jpeg,image/png,image/webp,image/*;q=0.8",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
