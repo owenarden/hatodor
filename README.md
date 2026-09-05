@@ -36,11 +36,14 @@ appears again automatically. Images can live under Home Assistant's
 photo does not require an ESPHome firmware rebuild.
 
 Config Sync also installs a **Dashboard - show cat of the day** action. It picks
-one editable, family-friendly cat saying per day, requests a fresh CATAAS photo
-with that saying on every run, and locally produces a cropped and dithered
-800x480 PNG. Dry, Chaotic, Encouraging, Tiny dictator, and Mixed tone choices
-are included. User edits to `/config/hatodor/cat_sayings.json` survive later
-Config Sync updates.
+one editable, family-friendly cat saying per day, requests a fresh breed photo
+from The Cat API on every run, and locally produces a captioned, cropped, and
+dithered 800x480 PNG. The renderer smooths busy background detail before making
+the higher-contrast one-bit image. Dry, Chaotic, Encouraging, Tiny dictator,
+and Mixed tone choices are included. User edits to
+`/config/hatodor/cat_sayings.json` survive later Config Sync updates.
+The free The Cat API key is entered in Config Sync's password-style App setting
+and is not exposed through a Home Assistant entity.
 
 `packages/school_dashboard.yaml` expects the Canvas helper sensor
 `sensor.canvas_student_assignments_28_days` to exist.

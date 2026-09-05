@@ -1,0 +1,5 @@
+configuration:
+  thecatapi_key:
+    name: The Cat API key
+    description: >-
+      Free API key from thecatapi.com, stored privately for the daily cat photo.

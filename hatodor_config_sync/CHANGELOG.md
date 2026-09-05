@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0
+
+- Use The Cat API's much larger breed-photo feed as the recommended source,
+  with a password-style App setting for its free API key.
+- Render sayings locally in a consistently sized black caption band instead of
+  depending on CATAAS's text renderer; tagged CATAAS sources remain supported.
+- Smooth fine background texture before monochrome conversion and increase
+  contrast so cat faces remain clearer on the E1001's one-bit display.
+
 ## 0.7.1
 
 - Keep the current checklist or photo visible while a new MOTD image downloads.

@@ -265,8 +265,8 @@ script:
   dashboard_show_cat_motd:
     alias: Dashboard - show cat of the day
     description: >-
-      Pick today's short cat saying, ask CATAAS for a fresh random cat with the
-      saying, and prepare a cropped, dithered 800x480 image for the E1001.
+      Pick today's short cat saying, fetch a fresh portrait from The Cat API,
+      and prepare a captioned, high-contrast 800x480 image for the E1001.
     mode: restart
     fields:
       tone:
@@ -282,12 +282,13 @@ script:
               - Encouraging
               - Tiny dictator
       image_url:
-        name: CATAAS random image URL
+        name: Cat photo source
         description: >-
-          Use https://cataas.com/cat for any random cat, or a tagged CATAAS
-          endpoint such as https://cataas.com/cat/cute.
+          The Cat API's breed-photo feed is the recommended default. A tagged
+          CATAAS endpoint such as https://cataas.com/cat/closeup also works.
         required: true
-        default: https://cataas.com/cat
+        default: >-
+          https://api.thecatapi.com/v1/images/search?size=full&mime_types=jpg,png&format=json&has_breeds=true&order=RANDOM&limit=1
         selector:
           text:
     sequence:

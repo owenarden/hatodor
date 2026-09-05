@@ -34,17 +34,16 @@ class RenderCatMotdTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertIn(first, {"One", "Two", "Three", "Four"})
 
-    def test_builds_fresh_cataas_says_url(self):
-        url = RENDERER.build_cataas_says_url(
+    def test_builds_fresh_cataas_image_url(self):
+        url = RENDERER.build_cataas_image_url(
             "https://cataas.com/cat/cute?brightness=2",
-            "The plant started it.",
             "revision-123",
         )
         parsed = urlsplit(url)
         query = parse_qs(parsed.query)
         self.assertEqual(parsed.hostname, "cataas.com")
         self.assertEqual(
-            unquote(parsed.path), "/cat/cute/says/The plant started it."
+            unquote(parsed.path), "/cat/cute"
         )
         self.assertEqual(query["width"], ["800"])
         self.assertEqual(query["height"], ["480"])
@@ -53,10 +52,30 @@ class RenderCatMotdTests(unittest.TestCase):
         self.assertEqual(query["hatodor"], ["revision-123"])
         self.assertEqual(query["brightness"], ["2"])
 
+    def test_untagged_cataas_url_prefers_closeups(self):
+        url = RENDERER.build_cataas_image_url(
+            "https://cataas.com/cat", "revision-456"
+        )
+        self.assertEqual(unquote(urlsplit(url).path), "/cat/closeup")
+
+    def test_parses_the_cat_api_response(self):
+        payload = json.dumps(
+            [{"url": "https://cdn2.thecatapi.com/images/cat-123.jpg"}]
+        ).encode()
+        self.assertEqual(
+            RENDERER.parse_cat_api_response(payload),
+            "https://cdn2.thecatapi.com/images/cat-123.jpg",
+        )
+
+    def test_rejects_untrusted_cat_api_image_url(self):
+        payload = json.dumps([{"url": "https://example.com/cat.jpg"}]).encode()
+        with self.assertRaisesRegex(ValueError, "unexpected image URL"):
+            RENDERER.parse_cat_api_response(payload)
+
     def test_rejects_non_cataas_urls(self):
         with self.assertRaisesRegex(ValueError, "cataas.com"):
-            RENDERER.build_cataas_says_url(
-                "https://example.com/cat.jpg", "Hello", "revision"
+            RENDERER.build_cataas_image_url(
+                "https://example.com/cat.jpg", "revision"
             )
 
     def test_crops_dithers_and_writes_png(self):
@@ -66,11 +85,14 @@ class RenderCatMotdTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             destination = Path(directory) / "motd.png"
-            RENDERER.render_image(payload.getvalue(), destination)
+            RENDERER.render_image(
+                payload.getvalue(), destination, "The plant started it."
+            )
             with Image.open(destination) as rendered:
                 self.assertEqual(rendered.format, "PNG")
                 self.assertEqual(rendered.size, (800, 480))
                 self.assertEqual(rendered.mode, "1")
+                self.assertEqual(rendered.getpixel((0, 479)), 0)
 
 
 if __name__ == "__main__":

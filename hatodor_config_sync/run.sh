@@ -3,6 +3,7 @@ set -eu
 
 HA_CONFIG="${HA_CONFIG:-/homeassistant}"
 MANAGED_ROOT="${MANAGED_ROOT:-/managed}"
+OPTIONS_FILE="${OPTIONS_FILE:-/data/options.json}"
 
 if [ ! -d "$HA_CONFIG" ]; then
     echo "ERROR: Home Assistant configuration directory is not mounted at $HA_CONFIG" >&2
@@ -40,6 +41,25 @@ chmod 0644 \
     "$HA_CONFIG/esphome/reterminal-e1001-morning.yaml" \
     "$HA_CONFIG/hatodor/cat_sayings.json"
 chmod 0755 "$HA_CONFIG/hatodor/render_cat_motd.py"
+
+# Keep the photo-service credential in a private file read by the renderer.
+# It is never placed in a Home Assistant entity or passed on the command line.
+CAT_API_KEY_FILE="$HA_CONFIG/hatodor/thecatapi_key"
+thecatapi_key=""
+if [ -f "$OPTIONS_FILE" ]; then
+    thecatapi_key="$(jq -r '.thecatapi_key // empty' "$OPTIONS_FILE")"
+fi
+if [ -n "$thecatapi_key" ]; then
+    umask 077
+    printf '%s\n' "$thecatapi_key" > "$CAT_API_KEY_FILE"
+    chmod 0600 "$CAT_API_KEY_FILE"
+    echo "Installed private The Cat API credential"
+elif [ -s "$CAT_API_KEY_FILE" ]; then
+    echo "Preserved private The Cat API credential"
+else
+    echo "WARNING: The Cat API key is not configured; use a CATAAS source until it is set" >&2
+fi
+unset thecatapi_key
 
 echo "Installed Hatodor-managed Home Assistant package: packages/morning_dashboard.yaml"
 echo "Installed Hatodor-managed Home Assistant package: packages/school_dashboard.yaml"

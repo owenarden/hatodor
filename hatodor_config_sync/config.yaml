@@ -1,5 +1,5 @@
 name: "Hatodor Config Sync"
-version: "0.7.1"
+version: "0.8.0"
 slug: "hatodor_config_sync"
 description: >-
   Installs the Hatodor-managed Home Assistant packages and ESPHome configuration
@@ -18,5 +18,7 @@ map:
     read_only: false
     path: /homeassistant
 
-options: {}
-schema: {}
+options:
+  thecatapi_key: ""
+schema:
+  thecatapi_key: password

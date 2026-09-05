@@ -64,6 +64,9 @@ jobs:
         run: |
           set -euo pipefail
           target="$(mktemp -d)"
+          app_data="$(mktemp -d)"
+          printf '%s\n' '{"thecatapi_key":"test-secret-key"}' > \
+            "$app_data/options.json"
 
           mkdir -p "$target/custom_components/super_productivity"
           cat > "$target/custom_components/super_productivity/coordinator.py" <<'PY'
@@ -91,6 +94,7 @@ jobs:
 
           docker run --rm \
             -v "$target:/homeassistant" \
+            -v "$app_data:/data" \
             hatodor-config-sync:test
 
           cmp \
@@ -108,12 +112,16 @@ jobs:
           cmp \
             hatodor_config_sync/managed/hatodor/cat_sayings.json \
             "$target/hatodor/cat_sayings.json"
+          test "$(cat "$target/hatodor/thecatapi_key")" = "test-secret-key"
+          test "$(stat -c '%a' "$target/hatodor/thecatapi_key")" = "600"
 
           grep -Fq 'dashboard_show_motd:' \
             "$target/packages/morning_dashboard.yaml"
           grep -Fq 'dashboard_show_cat_motd:' \
             "$target/packages/morning_dashboard.yaml"
           grep -Fq 'dashboard_render_cat_motd:' \
+            "$target/packages/morning_dashboard.yaml"
+          grep -Fq 'https://api.thecatapi.com/v1/images/search' \
             "$target/packages/morning_dashboard.yaml"
           grep -Fq 'dashboard_motd_image_url:' \
             "$target/packages/morning_dashboard.yaml"
@@ -123,6 +131,12 @@ jobs:
             "$target/esphome/reterminal-e1001-morning.yaml"
           grep -Fq 'changed && !should_download_image;' \
             "$target/esphome/reterminal-e1001-morning.yaml"
+          grep -Fq 'DEFAULT_CAT_PATH = "/cat/closeup"' \
+            "$target/hatodor/render_cat_motd.py"
+          grep -Fq 'PHOTO_CONTRAST = 1.4' \
+            "$target/hatodor/render_cat_motd.py"
+          grep -Fq 'draw_caption(image, saying)' \
+            "$target/hatodor/render_cat_motd.py"
           grep -Fq 'action: script.dashboard_get_combined_items' \
             "$target/esphome/reterminal-e1001-morning.yaml"
           grep -Fq 'interval: 30s' \
@@ -152,6 +166,7 @@ jobs:
 
           docker run --rm \
             -v "$target:/homeassistant" \
+            -v "$app_data:/data" \
             hatodor-config-sync:test
 
           test "$(grep -Fc 'self.api.async_get_tasks(include_done=True),' \

@@ -12,6 +12,11 @@ On install, start, or update it writes these repository-managed files:
 On its first run only, it also creates the user-editable file
 `/config/hatodor/cat_sayings.json`. Later Config Sync runs preserve that file.
 
+The App's **The Cat API key** setting is stored as a password and copied to
+`/config/hatodor/thecatapi_key` with owner-only permissions. The renderer reads
+that file directly; the credential is never placed in a Home Assistant entity
+or command argument. A free key is available from `https://thecatapi.com/`.
+
 It also applies small idempotent patches to the installed HACS Super
 Productivity integration, when present:
 
@@ -88,22 +93,25 @@ network. A `/local` Home Assistant file normally satisfies that requirement.
 ### Cat of the day
 
 Run `script.dashboard_show_cat_motd` (friendly name **Dashboard - show cat of
-the day**) to create a cat-photo MOTD. Select a tone and provide a CATAAS random
-image endpoint. The default is:
+the day**) to create a cat-photo MOTD. Select a tone and use the default
+The Cat API breed-photo feed:
 
 ```text
-https://cataas.com/cat
+https://api.thecatapi.com/v1/images/search?size=full&mime_types=jpg,png&format=json&has_breeds=true&order=RANDOM&limit=1
 ```
 
-A tagged endpoint such as `https://cataas.com/cat/cute` also works. Each run
-chooses a saying deterministically for the current calendar day, asks CATAAS
-for a fresh cat with that saying, and creates a unique local image URL. Running
-the action twice on the same day therefore keeps the saying but changes the
-cat. The generated source request is not cached.
+A tagged endpoint such as `https://cataas.com/cat/closeup` remains available as
+a fallback. Each run chooses a saying deterministically for the current
+calendar day, asks the photo service for a fresh cat, and creates a unique local
+image URL. Running the action twice on the same day therefore keeps the saying
+but changes the cat. The generated source request is not cached.
 
 The renderer uses the Pillow installation included with Home Assistant to
-auto-rotate and center-crop the response to 800x480, increase grayscale
-contrast, and apply Floyd-Steinberg dithering. It writes the final PNG under
+auto-rotate and center-crop the response to 800x480, gently smooth distracting
+background detail, increase grayscale contrast, and apply Floyd-Steinberg
+dithering. Hatodor lays out and draws the saying itself in a high-contrast
+caption band, so the text is consistent across photo services. It writes the
+final PNG under
 `/config/www/hatodor/motd-cache`; only the 20 newest generated images are kept.
 The rendering command has a 20-second download timeout and rejects responses
 larger than 10 MiB.
@@ -192,7 +200,8 @@ device, normally OTA from ESPHome Builder.
 For a release that changes only the ESPHome YAML, a Home Assistant restart is
 not otherwise required.
 
-Version 0.7.1 changes only the ESPHome source to avoid an intermediate loading
-refresh before a photo appears. Update and run Config Sync, then install the
-E1001 firmware wirelessly from ESPHome Builder. A Home Assistant restart is not
-required when upgrading from 0.7.0.
+Version 0.8.0 includes the 0.7.1 ESPHome loading-refresh fix and switches the
+recommended photo source to The Cat API. Before starting the updated App, enter
+your free key in its **The Cat API key** configuration field. Run Config Sync,
+restart Home Assistant to reload the action definition, then install the E1001
+firmware wirelessly from ESPHome Builder.

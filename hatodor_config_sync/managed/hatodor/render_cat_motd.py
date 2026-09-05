@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a daily cat saying from a dynamic CATAAS image endpoint."""
+"""Render a daily cat saying from The Cat API or a CATAAS image endpoint."""
 
 from __future__ import annotations
 
@@ -11,20 +11,27 @@ import os
 import sys
 import time
 from pathlib import Path
-from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 
 WIDTH = 800
 HEIGHT = 480
 MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024
+MAX_API_BYTES = 1024 * 1024
 DOWNLOAD_TIMEOUT_SECONDS = 20
 SAYINGS_PATH = Path("/config/hatodor/cat_sayings.json")
+CAT_API_KEY_PATH = Path("/config/hatodor/thecatapi_key")
 OUTPUT_DIR = Path("/config/www/hatodor/motd-cache")
 PUBLIC_PREFIX = "/local/hatodor/motd-cache"
 KEEP_RENDERED_IMAGES = 20
+DEFAULT_CAT_PATH = "/cat/closeup"
+PHOTO_BLUR_RADIUS = 0.6
+PHOTO_CONTRAST = 1.4
+CAPTION_MAX_WIDTH = 752
+THE_CAT_API_HOST = "api.thecatapi.com"
 
 
 def decode_argument(value: str) -> str:
@@ -67,7 +74,7 @@ def select_saying(pools: dict[str, list[str]], tone: str, day: str) -> str:
     return pool[index]
 
 
-def build_cataas_says_url(source_url: str, saying: str, revision: str) -> str:
+def build_cataas_image_url(source_url: str, revision: str) -> str:
     parsed = urlsplit(source_url.strip())
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("image URL must start with http:// or https://")
@@ -76,11 +83,13 @@ def build_cataas_says_url(source_url: str, saying: str, revision: str) -> str:
 
     path = parsed.path.rstrip("/")
     if path in {"", "/cat"}:
-        path = "/cat"
+        # The untagged feed often contains wide scenes whose backgrounds turn
+        # into e-paper noise. Prefer CATAAS's closeup pool for the simple URL;
+        # callers can still choose any explicit tag they want.
+        path = DEFAULT_CAT_PATH
     elif not path.startswith("/cat/") or "/says/" in path or path.endswith("/gif"):
         raise ValueError("use a CATAAS random image endpoint such as https://cataas.com/cat")
 
-    path = f"{path}/says/{quote(saying, safe='')}"
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     query.update(
         {
@@ -89,20 +98,70 @@ def build_cataas_says_url(source_url: str, saying: str, revision: str) -> str:
             "fit": "cover",
             "position": "center",
             "filter": "mono",
-            "fontSize": "36",
-            "fontColor": "white",
-            "fontBackground": "black",
             "hatodor": revision,
         }
     )
     return urlunsplit((parsed.scheme, parsed.netloc, path, urlencode(query), ""))
 
 
+def load_cat_api_key(path: Path = CAT_API_KEY_PATH) -> str:
+    try:
+        key = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError as error:
+        raise ValueError(
+            "The Cat API key is not configured in Hatodor Config Sync"
+        ) from error
+    if not key:
+        raise ValueError("The Cat API key is empty in Hatodor Config Sync")
+    return key
+
+
+def parse_cat_api_response(payload: bytes) -> str:
+    result = json.loads(payload)
+    if not isinstance(result, list) or not result or not isinstance(result[0], dict):
+        raise ValueError("The Cat API did not return an image")
+    image_url = str(result[0].get("url", "")).strip()
+    parsed = urlsplit(image_url)
+    hostname = (parsed.hostname or "").lower()
+    if parsed.scheme != "https" or not (
+        hostname == "thecatapi.com" or hostname.endswith(".thecatapi.com")
+    ):
+        raise ValueError("The Cat API returned an unexpected image URL")
+    return image_url
+
+
+def resolve_image_url(source_url: str, revision: str) -> str:
+    parsed = urlsplit(source_url.strip())
+    hostname = (parsed.hostname or "").lower()
+    if hostname in {"cataas.com", "www.cataas.com"}:
+        return build_cataas_image_url(source_url, revision)
+    if parsed.scheme != "https" or hostname != THE_CAT_API_HOST:
+        raise ValueError("cat MOTD source must use The Cat API or cataas.com")
+
+    request = Request(
+        source_url,
+        headers={
+            "User-Agent": "Hatodor-MOTD/0.8",
+            "Accept": "application/json",
+            "Cache-Control": "no-cache",
+            "x-api-key": load_cat_api_key(),
+        },
+    )
+    with urlopen(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+        content_type = response.headers.get_content_type()
+        if content_type != "application/json":
+            raise ValueError(f"The Cat API returned {content_type}, not JSON")
+        payload = response.read(MAX_API_BYTES + 1)
+    if len(payload) > MAX_API_BYTES:
+        raise ValueError("The Cat API response is larger than 1 MiB")
+    return parse_cat_api_response(payload)
+
+
 def download_image(url: str) -> bytes:
     request = Request(
         url,
         headers={
-            "User-Agent": "Hatodor-MOTD/0.7",
+            "User-Agent": "Hatodor-MOTD/0.8",
             "Accept": "image/jpeg,image/png,image/webp,image/*;q=0.8",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
@@ -121,7 +180,58 @@ def download_image(url: str) -> bytes:
     return payload
 
 
-def render_image(payload: bytes, destination: Path) -> None:
+def wrap_caption(
+    draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont
+) -> list[str]:
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        candidate = word if not current else f"{current} {word}"
+        width = draw.textbbox((0, 0), candidate, font=font)[2]
+        if current and width > CAPTION_MAX_WIDTH:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines
+
+
+def draw_caption(image: Image.Image, saying: str) -> None:
+    draw = ImageDraw.Draw(image)
+    lines: list[str] = []
+    font: ImageFont.ImageFont | None = None
+    for font_size in (40, 36, 32, 28, 24):
+        candidate_font = ImageFont.load_default(size=font_size)
+        candidate_lines = wrap_caption(draw, saying, candidate_font)
+        font = candidate_font
+        lines = candidate_lines
+        if len(lines) <= 3:
+            break
+    if font is None or not lines:
+        return
+
+    sample_bbox = draw.textbbox((0, 0), "Ag", font=font)
+    line_height = sample_bbox[3] - sample_bbox[1]
+    line_spacing = 5
+    vertical_padding = 15
+    band_height = (
+        vertical_padding * 2
+        + line_height * len(lines)
+        + line_spacing * (len(lines) - 1)
+    )
+    band_top = HEIGHT - band_height
+    draw.rectangle((0, band_top, WIDTH, HEIGHT), fill=0)
+    y = band_top + vertical_padding - sample_bbox[1]
+    for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        x = (WIDTH - (bbox[2] - bbox[0])) // 2
+        draw.text((x, y), line, fill=255, font=font)
+        y += line_height + line_spacing
+
+
+def render_image(payload: bytes, destination: Path, saying: str) -> None:
     with Image.open(io.BytesIO(payload)) as source:
         source.load()
         image = ImageOps.exif_transpose(source).convert("RGB")
@@ -131,7 +241,13 @@ def render_image(payload: bytes, destination: Path) -> None:
             method=Image.Resampling.LANCZOS,
             centering=(0.5, 0.5),
         )
-        image = ImageOps.autocontrast(ImageOps.grayscale(image), cutoff=1)
+        image = ImageOps.grayscale(image)
+        # Suppress tiny background texture before dithering, then widen the
+        # tonal separation so faces and fur read cleanly on a 1-bit panel.
+        image = image.filter(ImageFilter.GaussianBlur(radius=PHOTO_BLUR_RADIUS))
+        image = ImageOps.autocontrast(image, cutoff=2)
+        image = ImageEnhance.Contrast(image).enhance(PHOTO_CONTRAST)
+        draw_caption(image, saying)
         image = image.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_suffix(".tmp.png")
@@ -159,12 +275,12 @@ def main(argv: list[str]) -> int:
     pools = load_sayings()
     saying = select_saying(pools, tone, day)
     revision = str(time.time_ns())
-    request_url = build_cataas_says_url(source_url, saying, revision)
+    request_url = resolve_image_url(source_url, revision)
     payload = download_image(request_url)
 
     filename = f"cat-{revision}.png"
     destination = OUTPUT_DIR / filename
-    render_image(payload, destination)
+    render_image(payload, destination, saying)
     prune_old_images()
 
     print(
