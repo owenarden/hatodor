@@ -121,6 +121,8 @@ jobs:
             "$target/packages/school_dashboard.yaml"
           grep -Fq 'id(motd_dismissed_hash) = id(motd_hash);' \
             "$target/esphome/reterminal-e1001-morning.yaml"
+          grep -Fq 'changed && !should_download_image;' \
+            "$target/esphome/reterminal-e1001-morning.yaml"
           grep -Fq 'action: script.dashboard_get_combined_items' \
             "$target/esphome/reterminal-e1001-morning.yaml"
           grep -Fq 'interval: 30s' \

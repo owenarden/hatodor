@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1
+
+- Keep the current checklist or photo visible while a new MOTD image downloads.
+- Refresh the e-paper panel only after the image succeeds or fails, eliminating
+  the extra `Loading message image...` partial refresh that could leave ghosted
+  text beneath the finished photo.
+
 ## 0.7.0
 
 - Add `Dashboard - show cat of the day`, which combines a stable daily cat

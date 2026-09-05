@@ -192,7 +192,7 @@ device, normally OTA from ESPHome Builder.
 For a release that changes only the ESPHome YAML, a Home Assistant restart is
 not otherwise required.
 
-Version 0.7.0 changes the Home Assistant package and installs a local renderer,
-but does not change the ESPHome source. Update and run Config Sync, check the
-Home Assistant configuration, and restart Home Assistant. The E1001 does not
-need another firmware installation after upgrading from 0.6.0.
+Version 0.7.1 changes only the ESPHome source to avoid an intermediate loading
+refresh before a photo appears. Update and run Config Sync, then install the
+E1001 firmware wirelessly from ESPHome Builder. A Home Assistant restart is not
+required when upgrading from 0.7.0.

@@ -874,7 +874,12 @@ script:
                         id(motd_image_ready) = false;
                         id(motd_image_error) = false;
                       }
-                      id(checklist_changed) = changed;
+                      // Do not put an intermediate "Loading message image"
+                      // frame on e-paper. Keep the existing pixels while the
+                      // download runs; the image callback performs the one
+                      // refresh that matters when it succeeds or fails.
+                      id(checklist_changed) =
+                          changed && !should_download_image;
 
                   - if:
                       condition:
