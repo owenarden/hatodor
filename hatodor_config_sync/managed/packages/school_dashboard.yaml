@@ -114,6 +114,7 @@ script:
                 todo_entity: "{{ base_response.todo_entity }}"
                 items: "{{ combined_items }}"
                 deadlines: "{{ combined_deadlines }}"
+                motd: "{{ base_response.motd }}"
 
           - stop: Return combined daytime dashboard
             response_variable: dashboard_response

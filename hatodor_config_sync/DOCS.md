@@ -24,6 +24,63 @@ Super Productivity's actual `deadlineWithTime` / `deadlineDay` fields. Super
 Productivity separately stores planned/scheduled time in `dueWithTime` /
 `dueDay`; Hatodor deliberately leaves those scheduling fields untouched.
 
+## Message of the Day
+
+Config Sync creates these Home Assistant helpers:
+
+- `input_boolean.dashboard_motd_enabled`
+- `input_select.dashboard_motd_type`
+- `input_text.dashboard_motd_text`
+- `input_text.dashboard_motd_image_url`
+- `input_text.dashboard_motd_id`
+
+The easiest way to publish a message is to run
+`script.dashboard_show_motd` from Home Assistant. Choose **Text** or **Image**,
+enter the message (or optional image caption), and provide an image path when
+needed. The script enables the overlay and creates a fresh revision, so even an
+identical message is shown again after it was dismissed. Run
+`script.dashboard_hide_motd` to remove it remotely.
+
+You can also edit the helpers directly. Changing the revision, type, text, or
+image URL re-shows a dismissed MOTD. Turning the enabled helper off returns the
+display to its current checklist. The E1001 continues its normal 30-second data
+sync while the overlay is visible, and pressing the green button dismisses only
+the current revision. That dismissal survives an E1001 reboot; changed content,
+a new revision, or disabling and re-enabling the MOTD makes it visible again.
+
+### Local images
+
+Use a PNG file. Put a locally managed image under Home Assistant's
+`/config/www` directory; for example:
+
+```text
+/config/www/hatodor/motd.png
+```
+
+Then enter this helper/script value:
+
+```text
+/local/hatodor/motd.png
+```
+
+The E1001 resolves `/local` paths through
+`http://homeassistant.local:8123`. If that name is not reachable from the
+device, use Home Assistant's full LAN URL in the image helper instead, such as
+`http://192.168.1.10:8123/local/hatodor/motd.png`.
+
+The device fits the PNG inside the 800x480 screen and converts it to the
+panel's black-and-white pixel format. For the best photographic result, crop
+and dither the source to exactly 800x480 before placing it in `/config/www`.
+For example, with ImageMagick:
+
+```sh
+magick input.jpg -resize '800x480^' -gravity center -extent 800x480 \
+  -colorspace Gray -ordered-dither o8x8,2 motd.png
+```
+
+The image must be reachable without an interactive login from the E1001's
+network. A `/local` Home Assistant file normally satisfies that requirement.
+
 The repository copies of the package and ESPHome YAML are authoritative; local
 edits to those two files will be overwritten the next time this App runs. The
 Super Productivity patches are deliberately small in-place modifications rather
@@ -95,3 +152,9 @@ device, normally OTA from ESPHome Builder.
 
 For a release that changes only the ESPHome YAML, a Home Assistant restart is
 not otherwise required.
+
+Version 0.6.0 changes both the Home Assistant package and the ESPHome source:
+update Config Sync, restart Home Assistant, and then install the E1001 firmware
+wirelessly from ESPHome Builder. ESPHome 2025.12.0 or newer is required. The
+firmware now uses ESP-IDF so HTTPS image downloads retain certificate
+verification; the normal ESPHome OTA installation path is unchanged.

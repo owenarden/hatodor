@@ -28,6 +28,13 @@ Canvas rows are selectable on the reTerminal; pressing green opens a QR code for
 the assignment URL, while Super Productivity rows retain the existing toggle
 behavior. Morning and Evening routine behavior is unchanged.
 
+The dashboard also supports a Home Assistant-controlled, full-screen Message
+of the Day. It can show wrapped text or a runtime-downloaded black-and-white PNG
+with an optional caption. Green dismisses the current revision; changed content
+appears again automatically. Images can live under Home Assistant's
+`/config/www` directory and be selected with a `/local/...` path, so changing a
+photo does not require an ESPHome firmware rebuild.
+
 `packages/school_dashboard.yaml` expects the Canvas helper sensor
 `sensor.canvas_student_assignments_28_days` to exist.
 
