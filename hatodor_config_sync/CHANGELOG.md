@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0
+
+- Add `Dashboard - show cat of the day`, which combines a stable daily cat
+  saying with a fresh CATAAS photo each time the script runs.
+- Ask CATAAS to render the saying, center-crop the result to 800x480, convert it
+  to high-contrast monochrome, and apply Floyd-Steinberg dithering before the
+  E1001 downloads it as a normal PNG MOTD.
+- Add Dry, Chaotic, Encouraging, Tiny dictator, and Mixed tone choices with 48
+  bundled family-friendly sayings.
+- Install the sayings as `/config/hatodor/cat_sayings.json` only when the file
+  does not exist, so household edits survive future Config Sync updates.
+- Add download time and size limits, cache-busting CATAAS requests, unique local
+  image revisions, and automatic pruning of old generated images.
+
 ## 0.6.0
 
 - Add Home Assistant helpers and friendly show/hide scripts for a full-screen

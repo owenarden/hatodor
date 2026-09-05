@@ -1,0 +1,58 @@
+{
+  "dry": [
+    "I have reviewed your schedule. It needs more naps.",
+    "Your meeting could have been a nap.",
+    "I am not ignoring you. I am conserving attention.",
+    "The bowl was half empty. This is a formal complaint.",
+    "Gravity remains operational. I checked.",
+    "I have no notes. I ate them.",
+    "I see the problem. It is not currently my problem.",
+    "Your urgency has been noted and quietly disregarded.",
+    "I am available for consultation after lunch.",
+    "The evidence is circumstantial and also under the sofa.",
+    "I have considered your request. No.",
+    "Today I will be observing from a warmer location."
+  ],
+  "chaotic": [
+    "I knocked it over for quality assurance.",
+    "The plant started it.",
+    "There is no emergency. I just wanted everyone awake.",
+    "The red dot knows what it did.",
+    "I have completed today's chaos ahead of schedule.",
+    "I woke you because your alarm seemed lonely.",
+    "Good news: I found the loudest object in the house.",
+    "I regret nothing, including the thing behind the curtain.",
+    "The zoomies have no known cure.",
+    "I made a decision at full speed.",
+    "Please remain calm while I climb this.",
+    "Something fell. I was elsewhere emotionally."
+  ],
+  "encouraging": [
+    "You can do it. I will supervise from this sunbeam.",
+    "Take it one tiny paw-step at a time.",
+    "You are doing great. Reward yourself with a snack.",
+    "Today is full of possibilities and unattended boxes.",
+    "Be brave. The vacuum cannot run forever.",
+    "Believe in yourself like I believe this lap is mine.",
+    "Stretch first. Then casually conquer the day.",
+    "You have nine lives worth of chances today.",
+    "Small progress still deserves a very large nap.",
+    "Go get them. I will guard the warm spot.",
+    "You are more capable than the closed door suggests.",
+    "Do your best. Then sit directly on it."
+  ],
+  "tiny_dictator": [
+    "I require snacks, not explanations.",
+    "Everything here belongs to me. Especially that.",
+    "You may pet me with your eyes.",
+    "I was told there would be tuna.",
+    "This household will now observe quiet time.",
+    "Open the door. I have not decided which side I want.",
+    "Your chair has been reassigned.",
+    "The schedule is feeding, admiration, then more feeding.",
+    "I permit you to continue your little activities.",
+    "Bring me the good blanket. You know the one.",
+    "My patience has nine lives. This is the last one.",
+    "I have spoken. You may now open the can."
+  ]
+}

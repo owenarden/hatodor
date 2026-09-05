@@ -7,6 +7,10 @@ On install, start, or update it writes these repository-managed files:
 
 - `/config/packages/morning_dashboard.yaml`
 - `/config/esphome/reterminal-e1001-morning.yaml`
+- `/config/hatodor/render_cat_motd.py`
+
+On its first run only, it also creates the user-editable file
+`/config/hatodor/cat_sayings.json`. Later Config Sync runs preserve that file.
 
 It also applies small idempotent patches to the installed HACS Super
 Productivity integration, when present:
@@ -81,6 +85,41 @@ magick input.jpg -resize '800x480^' -gravity center -extent 800x480 \
 The image must be reachable without an interactive login from the E1001's
 network. A `/local` Home Assistant file normally satisfies that requirement.
 
+### Cat of the day
+
+Run `script.dashboard_show_cat_motd` (friendly name **Dashboard - show cat of
+the day**) to create a cat-photo MOTD. Select a tone and provide a CATAAS random
+image endpoint. The default is:
+
+```text
+https://cataas.com/cat
+```
+
+A tagged endpoint such as `https://cataas.com/cat/cute` also works. Each run
+chooses a saying deterministically for the current calendar day, asks CATAAS
+for a fresh cat with that saying, and creates a unique local image URL. Running
+the action twice on the same day therefore keeps the saying but changes the
+cat. The generated source request is not cached.
+
+The renderer uses the Pillow installation included with Home Assistant to
+auto-rotate and center-crop the response to 800x480, increase grayscale
+contrast, and apply Floyd-Steinberg dithering. It writes the final PNG under
+`/config/www/hatodor/motd-cache`; only the 20 newest generated images are kept.
+The rendering command has a 20-second download timeout and rejects responses
+larger than 10 MiB.
+
+The bundled tone choices are **Mixed**, **Dry**, **Chaotic**, **Encouraging**,
+and **Tiny dictator**. To customize them, edit:
+
+```text
+/config/hatodor/cat_sayings.json
+```
+
+Keep the file as a JSON object whose keys are tone names and whose values are
+lists of sayings. Config Sync deliberately does not overwrite this file after
+creating it. Delete it and rerun Config Sync if you want to restore the bundled
+sayings.
+
 The repository copies of the package and ESPHome YAML are authoritative; local
 edits to those two files will be overwritten the next time this App runs. The
 Super Productivity patches are deliberately small in-place modifications rather
@@ -153,8 +192,7 @@ device, normally OTA from ESPHome Builder.
 For a release that changes only the ESPHome YAML, a Home Assistant restart is
 not otherwise required.
 
-Version 0.6.0 changes both the Home Assistant package and the ESPHome source:
-update Config Sync, restart Home Assistant, and then install the E1001 firmware
-wirelessly from ESPHome Builder. ESPHome 2025.12.0 or newer is required. The
-firmware now uses ESP-IDF so HTTPS image downloads retain certificate
-verification; the normal ESPHome OTA installation path is unchanged.
+Version 0.7.0 changes the Home Assistant package and installs a local renderer,
+but does not change the ESPHome source. Update and run Config Sync, check the
+Home Assistant configuration, and restart Home Assistant. The E1001 does not
+need another firmware installation after upgrading from 0.6.0.

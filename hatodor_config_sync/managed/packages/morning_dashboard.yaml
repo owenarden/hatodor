@@ -69,6 +69,13 @@ input_text:
     icon: mdi:identifier
     max: 80
 
+shell_command:
+  dashboard_render_cat_motd: >-
+    python3 /config/hatodor/render_cat_motd.py
+    '{{ image_url | base64_encode }}'
+    '{{ tone | base64_encode }}'
+    '{{ dashboard_day | base64_encode }}'
+
 script:
   morning_dashboard_get_items:
     alias: Dashboard - get active items
@@ -254,6 +261,62 @@ script:
       - action: input_boolean.turn_on
         target:
           entity_id: input_boolean.dashboard_motd_enabled
+
+  dashboard_show_cat_motd:
+    alias: Dashboard - show cat of the day
+    description: >-
+      Pick today's short cat saying, ask CATAAS for a fresh random cat with the
+      saying, and prepare a cropped, dithered 800x480 image for the E1001.
+    mode: restart
+    fields:
+      tone:
+        name: Cat attitude
+        required: true
+        default: Mixed
+        selector:
+          select:
+            options:
+              - Mixed
+              - Dry
+              - Chaotic
+              - Encouraging
+              - Tiny dictator
+      image_url:
+        name: CATAAS random image URL
+        description: >-
+          Use https://cataas.com/cat for any random cat, or a tagged CATAAS
+          endpoint such as https://cataas.com/cat/cute.
+        required: true
+        default: https://cataas.com/cat
+        selector:
+          text:
+    sequence:
+      - variables:
+          dashboard_day: "{{ now().date().isoformat() }}"
+
+      - action: shell_command.dashboard_render_cat_motd
+        data:
+          image_url: "{{ image_url }}"
+          tone: "{{ tone }}"
+          dashboard_day: "{{ dashboard_day }}"
+        response_variable: cat_render
+
+      - if:
+          - condition: template
+            value_template: "{{ cat_render['returncode'] | int != 0 }}"
+        then:
+          - stop: >-
+              Could not prepare the cat MOTD: {{ cat_render['stderr'] | trim }}
+            error: true
+
+      - variables:
+          rendered_cat: "{{ cat_render['stdout'] | from_json }}"
+
+      - action: script.dashboard_show_motd
+        data:
+          motd_type: Image
+          text: ""
+          image_url: "{{ rendered_cat['local_url'] }}"
 
   dashboard_hide_motd:
     alias: Dashboard - hide message of the day

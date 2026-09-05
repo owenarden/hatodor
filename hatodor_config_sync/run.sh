@@ -2,6 +2,7 @@
 set -eu
 
 HA_CONFIG="${HA_CONFIG:-/homeassistant}"
+MANAGED_ROOT="${MANAGED_ROOT:-/managed}"
 
 if [ ! -d "$HA_CONFIG" ]; then
     echo "ERROR: Home Assistant configuration directory is not mounted at $HA_CONFIG" >&2
@@ -10,23 +11,40 @@ fi
 
 mkdir -p \
     "$HA_CONFIG/packages" \
-    "$HA_CONFIG/esphome"
+    "$HA_CONFIG/esphome" \
+    "$HA_CONFIG/hatodor" \
+    "$HA_CONFIG/www/hatodor/motd-cache"
 
-cp /managed/packages/morning_dashboard.yaml \
+cp "$MANAGED_ROOT/packages/morning_dashboard.yaml" \
     "$HA_CONFIG/packages/morning_dashboard.yaml"
-cp /managed/packages/school_dashboard.yaml \
+cp "$MANAGED_ROOT/packages/school_dashboard.yaml" \
     "$HA_CONFIG/packages/school_dashboard.yaml"
-cp /managed/esphome/reterminal-e1001-morning.yaml \
+cp "$MANAGED_ROOT/esphome/reterminal-e1001-morning.yaml" \
     "$HA_CONFIG/esphome/reterminal-e1001-morning.yaml"
+cp "$MANAGED_ROOT/hatodor/render_cat_motd.py" \
+    "$HA_CONFIG/hatodor/render_cat_motd.py"
+
+# This is deliberately user-owned after its first installation. Config Sync
+# updates the renderer but preserves any sayings the household has edited.
+if [ ! -f "$HA_CONFIG/hatodor/cat_sayings.json" ]; then
+    cp "$MANAGED_ROOT/hatodor/cat_sayings.json" \
+        "$HA_CONFIG/hatodor/cat_sayings.json"
+    echo "Installed editable Hatodor cat sayings: hatodor/cat_sayings.json"
+else
+    echo "Preserved editable Hatodor cat sayings: hatodor/cat_sayings.json"
+fi
 
 chmod 0644 \
     "$HA_CONFIG/packages/morning_dashboard.yaml" \
     "$HA_CONFIG/packages/school_dashboard.yaml" \
-    "$HA_CONFIG/esphome/reterminal-e1001-morning.yaml"
+    "$HA_CONFIG/esphome/reterminal-e1001-morning.yaml" \
+    "$HA_CONFIG/hatodor/cat_sayings.json"
+chmod 0755 "$HA_CONFIG/hatodor/render_cat_motd.py"
 
 echo "Installed Hatodor-managed Home Assistant package: packages/morning_dashboard.yaml"
 echo "Installed Hatodor-managed Home Assistant package: packages/school_dashboard.yaml"
 echo "Installed Hatodor-managed ESPHome config: esphome/reterminal-e1001-morning.yaml"
+echo "Installed Hatodor cat MOTD renderer: hatodor/render_cat_motd.py"
 
 # The upstream Super Productivity integration currently fetches its main task
 # list with include_done=False (the API default). That makes a completed project
