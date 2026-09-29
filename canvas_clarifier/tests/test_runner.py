@@ -33,7 +33,7 @@ def snapshot():
         user_id=42,
         courses=[{"id": c, "name": f"Course {c}", "apply_assignment_group_weights": c == 1002}
                  for c in (1001, 1002, 1003, 1004, 1005)],
-        groups={1002: [{"id": 50, "name": "Homework", "group_weight": 25.0},
+        groups={1002: [{"id": 50, "name": " Home  Work / Reading ", "group_weight": 25.0},
                        {"id": 51, "name": "Tests", "group_weight": 40.0}],
                 1001: [{"id": 60, "name": "Everything", "group_weight": 100.0}]},
         assignments={
@@ -127,8 +127,8 @@ class RunnerTests(unittest.TestCase):
         hw = by_key["canvas:assignment:1"]
         self.assertEqual(hw["due"], "2026-10-06T11:20-07:00")
         # Weighted course: the category's share of the grade is in the title.
-        self.assertIn("History: HOMEWORK - Reading (25%)", titles)
-        created = titles["History: HOMEWORK - Reading (25%)"]
+        self.assertIn("History: HOMEWORK - Reading (Home Work/Reading 25%)", titles)
+        created = titles["History: HOMEWORK - Reading (Home Work/Reading 25%)"]
         self.assertEqual(created["projectId"], "p1")
         self.assertTrue(created["notes"].startswith("Canvas: not submitted\n"))
         self.assertIn("clarifier:key=canvas:assignment:1", created["notes"])

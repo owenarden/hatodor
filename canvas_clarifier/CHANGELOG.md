@@ -6,7 +6,8 @@
   extra-credit columns, attendance). A quiz announced by a 0-point study guide
   still gets its own task.
 - In courses that weight their assignment groups, end each task title with
-  its category's share of the course grade, e.g. `Science: HW2 (25%)`.
+  the assignment's category and its share of the course grade, e.g.
+  `Science: HW2 (HW 25%)`.
 
 ## 0.1.2
 

@@ -43,6 +43,7 @@ class Item:
     # Share of the course grade carried by this assignment's category, when the
     # course weights its assignment groups.
     weight: float | None = None
+    weight_group: str | None = None
     extra: dict = field(default_factory=dict)
 
     @property
@@ -67,6 +68,12 @@ def clean_title(title: str) -> str:
     t2 = re.sub(r"\s*-\s*\d{1,2}/\d{1,2}(/\d{2,4})?\s*\(.*$", "", t2)
     t = t2 if len(t2.strip()) >= 4 else t
     return re.sub(r"\s+", " ", t).strip(" -–:")[:80]
+
+
+def group_label(name: str | None) -> str:
+    """'Quiz/ Preparedness ' -> 'Quiz/Preparedness', trimmed for small displays."""
+    label = re.sub(r"\s*/\s*", "/", re.sub(r"\s+", " ", name or "")).strip()
+    return label[:18].rstrip()
 
 
 def _condition(when: str, a: dict, course: Course, profile: Profile) -> bool:
@@ -199,7 +206,8 @@ def build_items(snap: Snapshot, profile: Profile, now: datetime) -> list[Item]:
     weighted = {c.get("id") for c in snap.courses if c.get("apply_assignment_group_weights")}
     items: list[Item] = []
     for cid, assignments in snap.assignments.items():
-        group_weight = {g.get("id"): g.get("group_weight") for g in snap.groups.get(cid) or []
+        group_weight = {g.get("id"): (g.get("group_weight"), group_label(g.get("name")))
+                        for g in snap.groups.get(cid) or []
                         if cid in weighted and (g.get("group_weight") or 0) > 0}
         course = profile.courses.get(cid)
         if course is None:
@@ -230,7 +238,8 @@ def build_items(snap: Snapshot, profile: Profile, now: datetime) -> list[Item]:
                 teacher_comment_after_submit=_comment_after_submit(sub, snap.user_id),
                 planner_done=a["id"] in planner_done,
                 submittable=category not in ("test",), source_sig=sig,
-                weight=group_weight.get(a.get("assignment_group_id")))
+                weight=(group_weight.get(a.get("assignment_group_id")) or (None, None))[0],
+                weight_group=(group_weight.get(a.get("assignment_group_id")) or (None, None))[1])
             items.append(item)
             if category == "no_points":
                 rule = next((r for r in course.rules if r.also_create
