@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import socket
 from dataclasses import dataclass, field
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -96,6 +97,8 @@ class Profile:
     courses: dict[int, Course]
     grace_days: int = 14
     drop_announcement_if: list[str] = field(default_factory=list)
+    source: str = ""
+    is_example: bool = False
 
     @classmethod
     def from_yaml(cls, text: str) -> "Profile":
@@ -130,8 +133,25 @@ class Profile:
         if not path.exists() and EXAMPLE_PROFILE.exists():
             config_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy(EXAMPLE_PROFILE, path)
-            print(f"Installed example course profile at {path}; edit it for your courses.")
-        return cls.from_yaml(path.read_text())
+            print(f"Installed the example course profile; replace it with yours at "
+                  f"{host_config_hint()}/courses.yaml")
+        text = path.read_text()
+        profile = cls.from_yaml(text)
+        profile.source = str(path)
+        profile.is_example = (EXAMPLE_PROFILE.exists()
+                              and text.strip() == EXAMPLE_PROFILE.read_text().strip())
+        return profile
+
+
+def host_config_hint() -> str:
+    """Where /config appears on the Home Assistant host (Samba, File editor, SSH).
+
+    An App's hostname is "<repo-prefix>-<slug with dashes>"; its config folder
+    is /addon_configs/<repo-prefix>_<slug>."""
+    host = os.environ.get("HOSTNAME") or socket.gethostname()
+    prefix = host.split("-", 1)[0] if "-" in host else ""
+    return f"/addon_configs/{prefix}_canvas_clarifier" if prefix else \
+        "/addon_configs/<id>_canvas_clarifier"
 
 
 def _short_name(name: str) -> str:

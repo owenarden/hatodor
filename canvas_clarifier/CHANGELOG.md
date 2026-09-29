@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2
+
+- Log where the course profile belongs on the Home Assistant host
+  (`/addon_configs/<id>_canvas_clarifier/courses.yaml`), warn while it is
+  still the installed example, and list Canvas courses it has no entry for.
+  The same information is in the status page under `profile`.
+
 ## 0.1.1
 
 - Show log output in Home Assistant: run Python unbuffered, since the base

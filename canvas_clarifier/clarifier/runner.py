@@ -167,8 +167,13 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
     store.set_meta("initialized", iso)
     store.set_meta("last_run", iso)
     store.commit()
+    known = set(profile.courses)
+    unmatched = [f"{c['id']} {c.get('name', '')}" for c in snap.courses
+                 if c.get("id") not in known]
     return {
         "last_run": iso, "dry_run": opts.dry_run, "first_run": first_run,
+        "profile": {"source": profile.source, "example": profile.is_example,
+                    "courses": len(profile.courses), "canvas_courses_without_entry": unmatched},
         "errors": errors, "sp_project_found": bool(project_id),
         "sp_changes": sp.log if sp else [],
         "new_alerts": [m for _, _, m in fresh], "notices": notices,

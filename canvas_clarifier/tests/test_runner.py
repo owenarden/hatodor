@@ -30,7 +30,7 @@ def assignment(aid, name, due_at, types, sub=None, created="2026-09-01T16:00:00Z
 def snapshot():
     return Snapshot(
         user_id=42,
-        courses=[{"id": c, "name": f"Course {c}"} for c in (1001, 1002, 1003, 1004)],
+        courses=[{"id": c, "name": f"Course {c}"} for c in (1001, 1002, 1003, 1004, 1005)],
         assignments={
             1002: [
                 assignment(1, "HOMEWORK - Reading - DUE: 10/6/2026 (Period 3) or 10/7/2026 (Period 2)",
@@ -150,6 +150,9 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("No longer in Canvas", alerts)
         # Paper work awaiting grading is not an alert.
         self.assertNotIn("Lab notes", alerts)
+        # Canvas courses the profile doesn't know are reported.
+        self.assertEqual(result["profile"]["canvas_courses_without_entry"], ["1005 Course 1005"])
+
         # First run records announcements silently; imports are dropped.
         self.assertEqual(result["notices"], [])
 
