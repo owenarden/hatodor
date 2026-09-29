@@ -6,6 +6,11 @@
   (`/addon_configs/<id>_canvas_clarifier/courses.yaml`), warn while it is
   still the installed example, and list Canvas courses it has no entry for.
   The same information is in the status page under `profile`.
+- Report a changed due date only when Canvas changed the assignment's due
+  date, title or description; changes to `courses.yaml` no longer look like
+  due-date changes.
+- Send every still-active alert on the first run after dry run is turned off,
+  since alerts raised during dry run were only logged.
 
 ## 0.1.1
 

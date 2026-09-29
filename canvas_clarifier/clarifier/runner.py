@@ -95,7 +95,7 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
                                             isDone=item.planner_done))
                     store.upsert_item(item.key, now=iso, due=_iso(item.due),
                                       title=item.display, category=item.category,
-                                      sp_task_id=new_id)
+                                      sp_task_id=new_id, source_sig=item.source_sig)
                     action = "create"
             elif not task.get("_archived"):
                 changes = {k: v for k, v in fields.items() if task.get(k) != v}
@@ -126,14 +126,16 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
                 elif item.due < now - timedelta(days=profile.grace_days):
                     current[(item.key, "still_ungraded")] = \
                         f"Still ungraded {profile.grace_days}+ days after it was due: {name}"
-        if stored is not None and stored["due"] and item.due and not past:
+        if stored is not None and stored["due"] and item.due and not past \
+                and stored["source_sig"] and stored["source_sig"] != item.source_sig:
             if abs((datetime.fromisoformat(stored["due"]) - item.due).total_seconds()) > 60:
                 current[(item.key, f"due_changed:{_iso(item.due)}")] = \
                     f"Due date changed: {name} is now due {fmt(item.due)}"
 
         store.upsert_item(item.key, now=iso, due=_iso(item.due), title=item.display,
                           category=item.category,
-                          sp_task_id=task.get("id") if task else None)
+                          sp_task_id=task.get("id") if task else None,
+                          source_sig=item.source_sig)
         rows.append({"key": item.key, "course": item.course.short, "title": item.display,
                      "category": item.category, "due": _iso(item.due), "due_note": item.due_note,
                      "canvas": item.status, "planner_done": item.planner_done,
@@ -164,6 +166,12 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
                 notices.append(f"New announcement — {label}: {t.get('title')}")
 
     fresh = store.sync_alerts(current, iso)
+    new_alerts = [m for _, _, m in fresh]
+    # Alerts raised during dry run were only logged. On the first live run,
+    # send every alert that is still active so none are lost.
+    if not opts.dry_run and store.get_meta("alerts_live") is None:
+        new_alerts = [msg for msg in store.active_alert_messages()]
+        store.set_meta("alerts_live", iso)
     store.set_meta("initialized", iso)
     store.set_meta("last_run", iso)
     store.commit()
@@ -176,7 +184,7 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
                     "courses": len(profile.courses), "canvas_courses_without_entry": unmatched},
         "errors": errors, "sp_project_found": bool(project_id),
         "sp_changes": sp.log if sp else [],
-        "new_alerts": [m for _, _, m in fresh], "notices": notices,
+        "new_alerts": new_alerts, "notices": notices,
         "active_alerts": store.active_alerts(), "items": rows,
     }
 

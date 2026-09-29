@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -36,6 +37,9 @@ class Item:
     teacher_comment_after_submit: str | None = None
     planner_done: bool = False
     submittable: bool = True
+    # Fingerprint of the Canvas fields a due date is derived from, so a changed
+    # due date is only reported when Canvas changed, not when the profile did.
+    source_sig: str = ""
     extra: dict = field(default_factory=dict)
 
     @property
@@ -203,6 +207,9 @@ def build_items(snap: Snapshot, profile: Profile, now: datetime) -> list[Item]:
             if extra_sub.get("submission_comments"):
                 sub["submission_comments"] = extra_sub["submission_comments"]
             st = canvas_status(a, sub)
+            sig = hashlib.sha1("\x1f".join(
+                str(a.get(k) or "") for k in ("due_at", "name", "description")).encode()
+            ).hexdigest()
             types = set(a.get("submission_types") or [])
             item = Item(
                 key=f"canvas:assignment:{a['id']}", course=course, assignment_id=a["id"],
@@ -214,7 +221,7 @@ def build_items(snap: Snapshot, profile: Profile, now: datetime) -> list[Item]:
                 submitted_at=st["submitted_at"],
                 teacher_comment_after_submit=_comment_after_submit(sub, snap.user_id),
                 planner_done=a["id"] in planner_done,
-                submittable=category not in ("test",))
+                submittable=category not in ("test",), source_sig=sig)
             items.append(item)
             if rule and rule.also_create == "test":
                 found = pick_date(a.get("description") or "", course.period,
@@ -233,5 +240,5 @@ def build_items(snap: Snapshot, profile: Profile, now: datetime) -> list[Item]:
                         display=f"Quiz: {name}" if "quiz" not in name.lower() else name,
                         category="test", url=item.url, due=when,
                         due_note=f"from description (period {course.period}), start of class",
-                        status="in class", submittable=False))
+                        status="in class", submittable=False, source_sig=sig))
     return items

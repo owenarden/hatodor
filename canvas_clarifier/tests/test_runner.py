@@ -175,6 +175,28 @@ class RunnerTests(unittest.TestCase):
                       result["new_alerts"])
         self.assertEqual(result["notices"], ["New announcement — English: Quiz moved"])
 
+    def test_profile_change_is_not_a_due_date_change(self):
+        self.run_once()
+        other = Profile.from_yaml(
+            (Path(__file__).resolve().parents[1] / "courses.example.yaml").read_text()
+            .replace("    period: 3\n", "    period: 2\n"))
+        result = run_once(snapshot(), other, self.opts, self.store,
+                          FakeSP(existing_tasks()), NOW)
+        by_key = {r["key"]: r for r in result["items"]}
+        self.assertEqual(by_key["canvas:assignment:1"]["due"], "2026-10-07T08:30-07:00")
+        self.assertFalse([a for a in result["new_alerts"] if a.startswith("Due date changed")])
+
+    def test_alerts_from_dry_run_are_sent_on_first_live_run(self):
+        dry = Options(dry_run=True, lookback_days=21, lookahead_days=35)
+        first = run_once(snapshot(), PROFILE, dry, self.store, FakeSP(existing_tasks()), NOW)
+        self.assertTrue(any("Extra Credit Poster" in a for a in first["new_alerts"]))
+        again = run_once(snapshot(), PROFILE, dry, self.store, FakeSP(existing_tasks()), NOW)
+        self.assertEqual(again["new_alerts"], [])
+        live, _ = self.run_once()
+        self.assertTrue(any("Extra Credit Poster" in a for a in live["new_alerts"]))
+        later, _ = self.run_once()
+        self.assertEqual(later["new_alerts"], [])
+
     def test_dry_run_writes_nothing(self):
         from clarifier.sp import SP
         sp = SP("http://127.0.0.1:9", dry_run=True)
