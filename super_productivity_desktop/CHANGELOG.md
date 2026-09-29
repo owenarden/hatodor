@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+- Pin Super Productivity to v19.1.0 instead of whatever release was newest when
+  the image was built. Existing installs were built with v18, whose Local REST
+  API silently ignores `deadlineDay`/`deadlineWithTime`, so tasks created by
+  Canvas Clarifier had no deadlines. Updating the App rebuilds it with v19.1.0.
+
 ## 0.6.1
 
 - Treat `sp_access_token` as a string rather than a password-schema field.

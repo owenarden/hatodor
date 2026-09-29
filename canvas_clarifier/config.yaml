@@ -1,5 +1,5 @@
 name: "Canvas Clarifier"
-version: "0.1.3"
+version: "0.1.4"
 slug: "canvas_clarifier"
 description: >-
   Filters a student's Canvas courses down to real homework, tests and

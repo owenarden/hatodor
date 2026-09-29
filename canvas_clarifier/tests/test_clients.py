@@ -70,10 +70,16 @@ class SPHandler(BaseHTTPRequestHandler):
         else:
             self._reply(404, {"ok": False, "error": {"code": "NOT_FOUND", "message": "nope"}})
 
+    drop_deadlines = False
+
     def do_POST(self):  # noqa: N802
         n = int(self.headers.get("Content-Length", 0))
-        SPHandler.requests.append(("POST", self.path, json.loads(self.rfile.read(n))))
-        self._reply(201, {"ok": True, "data": {"id": "new1"}})
+        body = json.loads(self.rfile.read(n))
+        SPHandler.requests.append(("POST", self.path, body))
+        task = {"id": "new1", "title": body.get("title")}
+        if not SPHandler.drop_deadlines:
+            task["deadlineWithTime"] = body.get("deadlineWithTime")
+        self._reply(201, {"ok": True, "data": task})
 
     def do_PATCH(self):  # noqa: N802
         n = int(self.headers.get("Content-Length", 0))
@@ -115,6 +121,20 @@ class ClientTests(unittest.TestCase):
                 sp._req("GET", "/missing")
             self.assertIn("NOT_FOUND", str(ctx.exception))
         finally:
+            srv.close()
+
+    def test_detects_old_sp_dropping_deadlines(self):
+        SPHandler.requests = []
+        srv = FakeServer(SPHandler)
+        try:
+            sp = SP(srv.url, dry_run=False)
+            sp.create({"title": "a", "deadlineWithTime": 1790000000000})
+            self.assertFalse(sp.deadline_ignored)
+            SPHandler.drop_deadlines = True
+            sp.create({"title": "b", "deadlineWithTime": 1790000000000})
+            self.assertTrue(sp.deadline_ignored)
+        finally:
+            SPHandler.drop_deadlines = False
             srv.close()
 
     def test_dry_run_makes_no_requests(self):

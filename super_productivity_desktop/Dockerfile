@@ -2,6 +2,9 @@ FROM jlesage/baseimage-gui:ubuntu-24.04-v4
 
 ARG BUILD_VERSION
 ARG BUILD_ARCH
+# Pinned so an App update is what changes the Super Productivity version.
+# v19+ is required: earlier REST APIs silently drop task deadline fields.
+ARG SP_VERSION=v19.1.0
 
 LABEL \
     io.hass.version="${BUILD_VERSION}" \
@@ -21,7 +24,7 @@ RUN set -eux; \
         libgbm1 \
         libasound2t64; \
     curl -fL \
-      "https://github.com/johannesjo/super-productivity/releases/latest/download/superProductivity-amd64.deb" \
+      "https://github.com/johannesjo/super-productivity/releases/download/${SP_VERSION}/superProductivity-amd64.deb" \
       -o /tmp/super-productivity.deb; \
     \
     # jlesage intentionally makes /var/log a symlink to /config/log. \

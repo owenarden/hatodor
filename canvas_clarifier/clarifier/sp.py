@@ -21,6 +21,7 @@ class SP:
         self.dry_run = dry_run
         self.timeout = timeout
         self.log: list[str] = []      # planned/performed writes, for the status page
+        self.deadline_ignored = False
 
     def _req(self, method: str, path: str, params: dict | None = None, body: dict | None = None):
         url = self.base + path
@@ -70,8 +71,9 @@ class SP:
         self.log.append(f"create: {fields.get('title')}")
         if self.dry_run:
             return None
-        created = self._req("POST", "/tasks", body=body)
-        return (created or {}).get("id")
+        created = self._req("POST", "/tasks", body=body) or {}
+        self._check_deadline(fields, created)
+        return created.get("id")
 
     def update(self, task_id: str, fields: dict, label: str) -> None:
         if not fields:
@@ -82,7 +84,16 @@ class SP:
         body = dict(fields)
         if "title" in body:
             body["isIgnoreShortSyntax"] = True
-        self._req("PATCH", f"/tasks/{task_id}", body=body)
+        updated = self._req("PATCH", f"/tasks/{task_id}", body=body) or {}
+        self._check_deadline(fields, updated)
+
+    def _check_deadline(self, sent: dict, task: dict) -> None:
+        """Super Productivity before v19 accepts deadline fields but drops them."""
+        if not isinstance(task, dict) or "id" not in task:
+            return
+        wanted = sent.get("deadlineWithTime") or sent.get("deadlineDay")
+        if wanted and not (task.get("deadlineWithTime") or task.get("deadlineDay")):
+            self.deadline_ignored = True
 
 
 def task_key(task: dict) -> str | None:
