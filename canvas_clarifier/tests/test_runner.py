@@ -127,8 +127,8 @@ class RunnerTests(unittest.TestCase):
         hw = by_key["canvas:assignment:1"]
         self.assertEqual(hw["due"], "2026-10-06T11:20-07:00")
         # Weighted course: the category's share of the grade is in the title.
-        self.assertIn("History: HOMEWORK - Reading (Home Work/Reading 25%)", titles)
-        created = titles["History: HOMEWORK - Reading (Home Work/Reading 25%)"]
+        self.assertIn("History: HOMEWORK - Reading · kind: Home Work/Reading (25%)", titles)
+        created = titles["History: HOMEWORK - Reading · kind: Home Work/Reading (25%)"]
         self.assertEqual(created["projectId"], "p1")
         self.assertTrue(created["notes"].startswith("Canvas: not submitted\n"))
         self.assertIn("clarifier:key=canvas:assignment:1", created["notes"])

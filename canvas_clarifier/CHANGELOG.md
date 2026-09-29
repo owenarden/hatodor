@@ -7,7 +7,7 @@
   still gets its own task.
 - In courses that weight their assignment groups, end each task title with
   the assignment's category and its share of the course grade, e.g.
-  `Science: HW2 (HW 25%)`.
+  `Science: HW2 · kind: HW (25%)`.
 
 ## 0.1.2
 

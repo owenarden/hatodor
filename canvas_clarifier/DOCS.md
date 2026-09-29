@@ -46,7 +46,7 @@ extra credit and unclassified items (titled `? …`) become tasks; exit
 tickets, participation and other gradebook-only entries are hidden.
 
 In courses that weight their assignment groups, a task's title ends with the
-Canvas category and its share of the course grade, such as `(HW 25%)`. Courses graded by
+Canvas category and its share of the course grade, such as `· kind: HW (25%)`. Courses graded by
 total points show no percentage.
 
 Due dates come from Canvas unless the course or rule sets `due_from`

@@ -23,8 +23,9 @@ def sp_title(item: Item) -> str:
     prefix = "? " if item.category == "unclassified" else ""
     weight = ""
     if item.weight:
-        group = f"{item.weight_group} " if item.weight_group else ""
-        weight = f" ({group}{item.weight:g}%)"
+        # The percentage is the category's share of the grade, not this item's.
+        kind = item.weight_group or "category"
+        weight = f" · kind: {kind} ({item.weight:g}%)"
     return f"{prefix}{item.course.short}: {item.display}{weight}"
 
 
