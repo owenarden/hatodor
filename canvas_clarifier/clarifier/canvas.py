@@ -27,6 +27,8 @@ class Snapshot:
     # assignment id -> submission (with submission_comments)
     submissions: dict[int, dict] = field(default_factory=dict)
     announcements: dict[int, list[dict]] = field(default_factory=dict)
+    # course id -> assignment groups (with group_weight)
+    groups: dict[int, list[dict]] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
 
@@ -85,6 +87,8 @@ class Canvas:
                  [("include[]", "submission"), ("per_page", "100")], "assignments"),
                 ("announcements", f"/courses/{cid}/discussion_topics",
                  [("only_announcements", "true"), ("per_page", "100")], "announcements"),
+                ("assignment groups", f"/courses/{cid}/assignment_groups",
+                 [("per_page", "100")], "groups"),
             ]:
                 try:
                     getattr(snap, target)[cid] = self.get(path, params)
@@ -114,6 +118,9 @@ def load_survey(root: Path, announcements_dir: Path | None = None) -> Snapshot:
             a = d / "assignments.json"
             if a.exists():
                 snap.assignments[cid] = json.loads(a.read_text())
+            g = d / "assignment_groups.json"
+            if g.exists():
+                snap.groups[cid] = json.loads(g.read_text())
     stream = root / "activity_stream.json"
     if stream.exists():
         for s in json.loads(stream.read_text()):

@@ -20,7 +20,7 @@ CONFIG_DIR = Path(os.environ.get("CLARIFIER_CONFIG_DIR", "/config"))
 EXAMPLE_PROFILE = Path(os.environ.get("CLARIFIER_EXAMPLE", "/app/courses.example.yaml"))
 
 VISIBLE = {"homework", "test", "prep", "project", "extra_credit", "unclassified"}
-HIDDEN = {"in_class", "gradebook", "ignore"}
+HIDDEN = {"in_class", "gradebook", "ignore", "no_points"}
 
 
 @dataclass

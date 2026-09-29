@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3
+
+- Skip assignments worth 0 points (study-guide announcements, empty
+  extra-credit columns, attendance). A quiz announced by a 0-point study guide
+  still gets its own task.
+- In courses that weight their assignment groups, end each task title with
+  the assignment's category and its share of the course grade, e.g.
+  `Science: HW2 · kind: HW (25%)`.
+
 ## 0.1.2
 
 - Log where the course profile belongs on the Home Assistant host

@@ -19,8 +19,9 @@ PROFILE = Profile.from_yaml(
 
 
 def assignment(aid, name, due_at, types, sub=None, created="2026-09-01T16:00:00Z",
-               description="", points=10):
+               description="", points=10, group=None):
     return {"id": aid, "name": name, "due_at": due_at, "created_at": created,
+            "assignment_group_id": group,
             "submission_types": types, "points_possible": points, "published": True,
             "description": description,
             "html_url": f"https://canvas.example/courses/1/assignments/{aid}",
@@ -30,15 +31,20 @@ def assignment(aid, name, due_at, types, sub=None, created="2026-09-01T16:00:00Z
 def snapshot():
     return Snapshot(
         user_id=42,
-        courses=[{"id": c, "name": f"Course {c}"} for c in (1001, 1002, 1003, 1004, 1005)],
+        courses=[{"id": c, "name": f"Course {c}", "apply_assignment_group_weights": c == 1002}
+                 for c in (1001, 1002, 1003, 1004, 1005)],
+        groups={1002: [{"id": 50, "name": " Home  Work / Reading ", "group_weight": 25.0},
+                       {"id": 51, "name": "Tests", "group_weight": 40.0}],
+                1001: [{"id": 60, "name": "Everything", "group_weight": 100.0}]},
         assignments={
             1002: [
                 assignment(1, "HOMEWORK - Reading - DUE: 10/6/2026 (Period 3) or 10/7/2026 (Period 2)",
-                           "2026-10-08T06:59:59Z", ["on_paper"]),
+                           "2026-10-08T06:59:59Z", ["on_paper"], group=50),
+                assignment(10, "Name card", "2026-10-02T06:59:59Z", ["on_paper"], points=0),
                 assignment(2, "HOMEWORK - Old reading - DUE: 9/24/2026", "2026-09-25T06:59:59Z",
                            ["on_paper"], {"workflow_state": "graded", "score": 9}),
                 assignment(3, "Extra Credit Poster", "2026-09-19T06:59:59Z", ["online_upload"],
-                           {"workflow_state": "graded", "score": 0, "missing": True}, points=0),
+                           {"workflow_state": "graded", "score": 0, "missing": True}, points=5),
             ],
             1003: [
                 assignment(9, "Science fair project", "2026-12-10T06:59:59Z", ["online_upload"]),
@@ -50,7 +56,7 @@ def snapshot():
                            created="2026-09-28T16:00:00Z"),
                 assignment(7, "Study Guide for Roots Quiz 10/6 and 10/7", "2026-10-08T06:59:59Z",
                            ["none"], description="Quiz Tues 10/6 (Block 3) and Weds 10/7 "
-                                                 "(Blocks 2, 4 and 6)."),
+                                                 "(Blocks 2, 4 and 6).", points=0, group=60),
             ],
             1004: [assignment(8, "Club dues", "2026-10-01T06:59:59Z", ["none"])],
         },
@@ -120,15 +126,20 @@ class RunnerTests(unittest.TestCase):
         # Real date from the title, at the start of period 3 on Tuesday.
         hw = by_key["canvas:assignment:1"]
         self.assertEqual(hw["due"], "2026-10-06T11:20-07:00")
-        self.assertIn("History: HOMEWORK - Reading", titles)
-        created = titles["History: HOMEWORK - Reading"]
+        # Weighted course: the category's share of the grade is in the title.
+        self.assertIn("History: HOMEWORK - Reading · kind: Home Work/Reading (25%)", titles)
+        created = titles["History: HOMEWORK - Reading · kind: Home Work/Reading (25%)"]
         self.assertEqual(created["projectId"], "p1")
         self.assertTrue(created["notes"].startswith("Canvas: not submitted\n"))
         self.assertIn("clarifier:key=canvas:assignment:1", created["notes"])
 
-        # Study guide -> prep item plus a quiz on the even-block day.
+        # 0-point study guide is skipped, but its quiz is created on the even-block day.
+        self.assertNotIn("canvas:assignment:7", by_key)
         self.assertEqual(by_key["canvas:assignment:7#test"]["due"], "2026-10-07T08:30-07:00")
         self.assertEqual(by_key["canvas:assignment:7#test"]["category"], "test")
+        # 0-point assignments are skipped; unweighted courses show no percentage.
+        self.assertNotIn("canvas:assignment:10", by_key)
+        self.assertIsNone(by_key["canvas:assignment:7#test"]["weight"])
 
         # Projects appear long before the look-ahead window.
         self.assertIn("Science: Science fair project", titles)
