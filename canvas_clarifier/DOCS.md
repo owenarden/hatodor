@@ -39,11 +39,15 @@ tailnet; it shows school data.
 
 ## What becomes a task
 
-Each Canvas assignment is classified by the rules in `courses.yaml`, in
-order: `global_rules`, then the course's `rules`, then its
-`default_category`, else `unclassified`. Homework, tests, prep, projects,
+Assignments worth 0 points are skipped. Every other Canvas assignment is
+classified by the rules in `courses.yaml`, in order: `global_rules`, then the
+course's `rules`, then its `default_category`, else `unclassified`. Homework, tests, prep, projects,
 extra credit and unclassified items (titled `? …`) become tasks; exit
 tickets, participation and other gradebook-only entries are hidden.
+
+In courses that weight their assignment groups, a task's title ends with its
+category's share of the course grade, such as `(25%)`. Courses graded by
+total points show no percentage.
 
 Due dates come from Canvas unless the course or rule sets `due_from`
 (`title`, `description` or `title_or_description`). Then the date for the

@@ -21,7 +21,8 @@ def fmt(dt: datetime | None) -> str:
 
 def sp_title(item: Item) -> str:
     prefix = "? " if item.category == "unclassified" else ""
-    return f"{prefix}{item.course.short}: {item.display}"
+    weight = f" ({item.weight:g}%)" if item.weight else ""
+    return f"{prefix}{item.course.short}: {item.display}{weight}"
 
 
 def sp_notes(item: Item) -> str:
@@ -137,7 +138,8 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
                           sp_task_id=task.get("id") if task else None,
                           source_sig=item.source_sig)
         rows.append({"key": item.key, "course": item.course.short, "title": item.display,
-                     "category": item.category, "due": _iso(item.due), "due_note": item.due_note,
+                     "category": item.category, "weight": item.weight,
+                     "due": _iso(item.due), "due_note": item.due_note,
                      "canvas": item.status, "planner_done": item.planner_done,
                      "sp_done": bool(task and task.get("isDone")), "sp_action": action,
                      "url": item.url})
