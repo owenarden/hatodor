@@ -16,4 +16,6 @@ COPY courses.example.yaml /app/courses.example.yaml
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python3", "-m", "clarifier"]
+# -u: the base image's s6 init can start CMD without the image ENV, so do not
+# rely on PYTHONUNBUFFERED for log output to appear.
+CMD ["python3", "-u", "-m", "clarifier"]

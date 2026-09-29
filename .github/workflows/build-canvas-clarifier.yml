@@ -71,3 +71,19 @@ jobs:
           set +e
           docker run --rm canvas-clarifier:test
           test $? -eq 1
+
+      - name: Log output appears under the base image's init
+        run: |
+          set -euo pipefail
+          data="$(mktemp -d)"
+          printf '%s\n' '{"canvas_base_url":"http://127.0.0.1:9","canvas_token":"x","sp_url":"http://127.0.0.1:9","sp_project":"School","poll_minutes":60,"dry_run":true,"notify_service":"","lookback_days":21,"lookahead_days":35}' \
+            > "$data/options.json"
+          cid="$(docker run -d -v "$data:/data" canvas-clarifier:test)"
+          for i in $(seq 1 30); do
+            if docker logs "$cid" 2>&1 | grep -q "Run failed"; then break; fi
+            sleep 1
+          done
+          docker logs "$cid" 2>&1
+          docker logs "$cid" 2>&1 | grep -q "Canvas Clarifier started"
+          docker logs "$cid" 2>&1 | grep -q "Run failed"
+          docker rm -f "$cid"
