@@ -182,6 +182,9 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
     store.set_meta("initialized", iso)
     store.set_meta("last_run", iso)
     store.commit()
+    if sp is not None and getattr(sp, "deadline_ignored", False):
+        errors.append("Super Productivity ignored task deadlines; it needs v19 or later "
+                      "(update the Super Productivity Desktop App)")
     known = set(profile.courses)
     unmatched = [f"{c['id']} {c.get('name', '')}" for c in snap.courses
                  if c.get("id") not in known]

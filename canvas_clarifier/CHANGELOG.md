@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+
+- Report an error when Super Productivity accepts a task but drops its
+  deadline, which is what versions before v19 do. Update the Super
+  Productivity Desktop App (0.7.0 installs v19.1.0); existing tasks get their
+  deadlines on the next run.
+
 ## 0.1.3
 
 - Skip assignments worth 0 points (study-guide announcements, empty

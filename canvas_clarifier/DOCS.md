@@ -18,14 +18,18 @@ project you name, and never deletes tasks.
 2. **Super Productivity project.** In Super Productivity, create a project
    named **School** (or whatever you set in **Super Productivity project**).
    The Local REST API cannot create projects.
-3. **Super Productivity address.** The default `http://172.30.32.1:3877`
+3. **Super Productivity version.** Task deadlines need Super Productivity
+   v19 or later (Super Productivity Desktop App 0.7.0+). Older versions accept
+   the tasks but silently drop their deadlines; the App reports this as an
+   error.
+4. **Super Productivity address.** The default `http://172.30.32.1:3877`
    reaches the Super Productivity Desktop App's REST proxy on the Home
    Assistant host. If that fails, use the host's LAN address and port 3877.
-4. **Course profile.** On first start the App installs an example at
+5. **Course profile.** On first start the App installs an example at
    `/addon_configs/<id>_canvas_clarifier/courses.yaml`. Replace it with your
    courses (IDs from Canvas course URLs), bell schedule and per-teacher rules.
    The App re-reads it every run.
-5. **Dry run.** The App starts in dry run: it logs the Super Productivity
+6. **Dry run.** The App starts in dry run: it logs the Super Productivity
    changes and alerts it would make without making them. Check the App log
    and the status page, then turn **Dry run** off.
 
