@@ -5,15 +5,29 @@ from __future__ import annotations
 import json
 import os
 import urllib.request
+from pathlib import Path
 
 SUPERVISOR = os.environ.get("CLARIFIER_HA_URL", "http://supervisor/core/api")
+# s6-overlay keeps the container environment here when it starts CMD with a
+# reset environment.
+S6_ENV = Path(os.environ.get("CLARIFIER_S6_ENV", "/run/s6/container_environment"))
+
+
+def supervisor_token() -> str | None:
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if token:
+        return token
+    try:
+        return (S6_ENV / "SUPERVISOR_TOKEN").read_text().strip() or None
+    except OSError:
+        return None
 
 
 def send(title: str, lines: list[str], service: str = "", dry_run: bool = False) -> str:
     message = "\n".join(f"• {l}" for l in lines)
     if dry_run:
         return f"[dry run] would notify: {title}\n{message}"
-    token = os.environ.get("SUPERVISOR_TOKEN")
+    token = supervisor_token()
     if not token:
         return f"(no Home Assistant token) {title}\n{message}"
     if service:

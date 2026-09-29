@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1
+
+- Show log output in Home Assistant: run Python unbuffered, since the base
+  image's init can start the App without its environment settings.
+- Find the Home Assistant token in s6's saved container environment when it
+  is not in the process environment, so alerts can be delivered.
+
 ## 0.1.0
 
 - First release: read Canvas assignments, planner completion, submission
