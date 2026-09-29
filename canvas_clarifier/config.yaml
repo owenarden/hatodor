@@ -1,0 +1,47 @@
+name: "Canvas Clarifier"
+version: "0.1.0"
+slug: "canvas_clarifier"
+description: >-
+  Filters a student's Canvas courses down to real homework, tests and
+  deadlines, keeps them as tasks in a Super Productivity project, and alerts
+  when local completion disagrees with Canvas.
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+init: false
+stage: experimental
+backup: cold
+homeassistant_api: true
+
+ports:
+  3878/tcp: 3878
+ports_description:
+  3878/tcp: "Clarifier status (JSON); keep it on your LAN or tailnet"
+
+map:
+  - type: addon_config
+    read_only: false
+    path: /config
+
+options:
+  canvas_base_url: ""
+  canvas_token: ""
+  sp_url: "http://172.30.32.1:3877"
+  sp_project: "School"
+  poll_minutes: 15
+  dry_run: true
+  notify_service: ""
+  lookback_days: 21
+  lookahead_days: 35
+schema:
+  canvas_base_url: url
+  canvas_token: password
+  sp_url: url
+  sp_project: str
+  poll_minutes: int(5,1440)
+  dry_run: bool
+  notify_service: "str?"
+  lookback_days: int(1,120)
+  lookahead_days: int(1,180)

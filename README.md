@@ -12,6 +12,18 @@ the Home Assistant Super Productivity integration.
 
 See `super_productivity_desktop/DOCS.md`.
 
+### Canvas Clarifier
+
+Reads a student's Canvas courses with a personal access token, classifies each
+assignment with per-course rules (`courses.yaml`), resolves real due dates from
+the bell schedule and per-period text in titles and descriptions, and keeps
+homework, tests and deadlines as tasks in a Super Productivity project. It
+checks tasks off when Canvas shows them turned in, and sends one Home Assistant
+notification per run for new mismatches, such as work marked done that Canvas
+lists as missing. Starts in dry run.
+
+See `canvas_clarifier/DOCS.md`.
+
 ### Hatodor Config Sync
 
 A one-shot App that deploys the repository-managed configuration files into the
