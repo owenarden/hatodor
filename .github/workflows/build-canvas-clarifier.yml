@@ -1,0 +1,73 @@
+name: Build Canvas Clarifier
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "canvas_clarifier/**"
+      - ".github/workflows/build-canvas-clarifier.yml"
+  pull_request:
+    paths:
+      - "canvas_clarifier/**"
+      - ".github/workflows/build-canvas-clarifier.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Unit tests
+        working-directory: canvas_clarifier
+        run: |
+          python -m pip install --disable-pip-version-check "PyYAML>=6,<7"
+          python -m unittest discover -s tests -t .
+
+      - name: Read app version
+        id: version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version: *"\([^"]*\)"/\1/p' canvas_clarifier/config.yaml)"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Canvas Clarifier image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./canvas_clarifier
+          file: ./canvas_clarifier/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: canvas-clarifier:test
+          build-args: |
+            BUILD_VERSION=${{ steps.version.outputs.version }}
+            BUILD_ARCH=amd64
+
+      - name: Run the tests inside the image
+        run: |
+          docker run --rm \
+            -v "$PWD/canvas_clarifier/tests:/app/tests:ro" \
+            canvas-clarifier:test \
+            python3 -m unittest discover -s tests -t .
+
+      - name: Refuse to start without credentials
+        run: |
+          set +e
+          docker run --rm canvas-clarifier:test
+          test $? -eq 1

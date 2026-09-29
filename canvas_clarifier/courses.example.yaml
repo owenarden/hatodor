@@ -1,0 +1,103 @@
+# Canvas Clarifier course profile (example).
+#
+# Copy this file's structure for your own courses. The App reads
+# /addon_configs/<id>_canvas_clarifier/courses.yaml and re-reads it every run.
+# Course IDs are the numbers in Canvas course URLs (/courses/1234).
+#
+# Categories:
+#   homework      take-home work                     -> SP task
+#   test          quiz/test taken in class           -> SP task at the start of class
+#   prep          study guide, notebook check        -> SP task
+#   project       long-horizon work                  -> SP task
+#   extra_credit  optional                           -> SP task; alerts only on mismatches
+#   unclassified  nothing matched                    -> SP task titled "? …"
+#   in_class      exit tickets, class activities     -> hidden
+#   gradebook     participation/attendance columns   -> hidden
+
+schedule:
+  term: {start: 2026-08-06, end: 2026-12-31}
+  day_types:
+    monday:
+      weekdays: [mon]
+      periods: {1: "08:30-09:25", 2: "09:30-10:25", 3: "10:45-11:50", 4: "11:55-12:50"}
+    odd:
+      weekdays: [tue, thu]
+      periods: {1: "08:30-10:15", 3: "11:20-13:05"}
+    even:
+      weekdays: [wed, fri]
+      periods: {2: "08:30-10:15", 4: "11:20-13:05"}
+  # Dates that break the weekday pattern: date -> day type, or none.
+  overrides:
+    2026-11-26: none
+
+student:
+  timezone: America/Los_Angeles
+  # Canvas's "no real time" default. Paper work with this time is treated as
+  # due at the start of class that day.
+  placeholder_due_time: "23:59"
+  # Paper work marked done locally but still ungraded this long after the
+  # due date raises a soft alert.
+  grading_grace_days: 14
+
+global_rules:
+  - when: created_after_due          # gradebook column added after the fact
+    category: gradebook
+  - when: due_before_term            # last year's date carried over in a course copy
+    category: gradebook
+  - match: '\bparticipation\b|\battendance\b'
+    category: gradebook
+  - match: 'extra credit'
+    category: extra_credit
+
+announcements:
+  # Announcements imported from an earlier year's course are never posted and
+  # predate the term; they are always dropped.
+  drop_if: [created_before_term_start, posted_at_null]
+
+courses:
+  1001:
+    name: English (Example)
+    short: English
+    period: 2
+    # Real dates are written in the description per block, e.g.
+    # "Tues 10/6 (Block 3) and Weds 10/7 (Blocks 2, 4 and 6)".
+    due_from: description
+    rules:
+      - match: '^study guide for'
+        category: prep
+        also_create: test
+      - match: 'quiz grade|^quiz:'
+        category: gradebook
+      - match: 'packet|project|essay'
+        category: homework
+
+  1002:
+    name: History (Example)
+    short: History
+    period: 3
+    # Titles carry the dates: "DUE: 10/6/2026 (Period 3) or 10/7/2026 (Period 2)".
+    due_from: title
+    rules:
+      - match: '^(checked )?homework'
+        category: homework
+      - match: 'exit ticket'
+        category: in_class
+      - match: '\btest\b|\bquiz\b'
+        category: test
+
+  1003:
+    name: Science (Example)
+    short: Science
+    period: 4
+    default_category: homework
+    rules:
+      - match: '\bproject\b'
+        category: project
+      - match: 'NB check|notebook'
+        category: prep
+      - when: external_tool_unlocks_during_school_day
+        category: test
+
+  1004:
+    name: Clubs
+    ignore: true

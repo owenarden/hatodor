@@ -1,0 +1,36 @@
+configuration:
+  canvas_base_url:
+    name: Canvas URL
+    description: Your school's Canvas address, e.g. https://yourschool.instructure.com
+  canvas_token:
+    name: Canvas access token
+    description: >-
+      Personal access token from the student's Canvas account
+      (Account > Settings > Approved Integrations). Stored only in App options.
+  sp_url:
+    name: Super Productivity API
+    description: >-
+      Address of the Super Productivity Desktop App's REST proxy. The default
+      reaches port 3877 on the Home Assistant host.
+  sp_project:
+    name: Super Productivity project
+    description: >-
+      Title of the SP project that receives school tasks. Create it in Super
+      Productivity first; the API cannot create projects.
+  poll_minutes:
+    name: Poll interval (minutes)
+  dry_run:
+    name: Dry run
+    description: >-
+      Log the Super Productivity changes and alerts without making them.
+      Leave on until the status page looks right.
+  notify_service:
+    name: Notify service
+    description: >-
+      Home Assistant notify service for alerts, e.g. mobile_app_owens_iphone.
+      Leave empty to create persistent notifications instead.
+  lookback_days:
+    name: Look-back window (days)
+    description: How far back to reconcile past-due work.
+  lookahead_days:
+    name: Look-ahead window (days)
