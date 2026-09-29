@@ -15,7 +15,7 @@ from pathlib import Path
 
 from . import notify
 from .canvas import Canvas, CanvasError, load_survey
-from .config import CONFIG_DIR, Options, Profile
+from .config import CONFIG_DIR, Options, Profile, host_config_hint
 from .runner import run_once
 from .sp import SP
 from .store import Store
@@ -83,6 +83,7 @@ def main() -> int:
     server = ThreadingHTTPServer(("0.0.0.0", 3878), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     print(f"Canvas Clarifier started (dry run: {opts.dry_run}); status on port 3878")
+    print(f"Course profile: {host_config_hint()}/courses.yaml")
     while True:
         try:
             profile = Profile.load()          # pick up edits to courses.yaml
@@ -92,6 +93,13 @@ def main() -> int:
             print(f"{result['last_run']}: {len(result['items'])} items, "
                   f"{len(result['sp_changes'])} SP changes, "
                   f"{len(result['new_alerts'])} new alerts, errors: {result['errors'] or 'none'}")
+            prof = result["profile"]
+            if prof["example"]:
+                print(f"  WARNING: courses.yaml is still the example; put your profile at "
+                      f"{host_config_hint()}/courses.yaml")
+            elif prof["canvas_courses_without_entry"]:
+                print("  Canvas courses missing from courses.yaml (default rules): "
+                      + "; ".join(prof["canvas_courses_without_entry"]))
             for line in result["sp_changes"]:
                 print(("  [dry run] " if opts.dry_run else "  ") + line)
             if result.get("notify"):

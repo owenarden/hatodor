@@ -37,6 +37,9 @@ class Store:
         self.db = sqlite3.connect(str(path))
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        cols = {r["name"] for r in self.db.execute("PRAGMA table_info(items)")}
+        if "source_sig" not in cols:       # added in 0.1.2
+            self.db.execute("ALTER TABLE items ADD COLUMN source_sig TEXT")
 
     # items -------------------------------------------------------------
     def item(self, key: str) -> sqlite3.Row | None:
@@ -47,17 +50,20 @@ class Store:
             "SELECT * FROM items WHERE sp_task_id IS NOT NULL").fetchall()
 
     def upsert_item(self, key: str, *, now: str, due: str | None, title: str,
-                    category: str, sp_task_id: str | None = None) -> None:
+                    category: str, sp_task_id: str | None = None,
+                    source_sig: str | None = None) -> None:
         row = self.item(key)
         if row is None:
             self.db.execute(
-                "INSERT INTO items (key, sp_task_id, due, title, category, first_seen, last_seen)"
-                " VALUES (?,?,?,?,?,?,?)", (key, sp_task_id, due, title, category, now, now))
+                "INSERT INTO items (key, sp_task_id, due, title, category, first_seen,"
+                " last_seen, source_sig) VALUES (?,?,?,?,?,?,?,?)",
+                (key, sp_task_id, due, title, category, now, now, source_sig))
         else:
             self.db.execute(
                 "UPDATE items SET due=?, title=?, category=?, last_seen=?,"
-                " sp_task_id=COALESCE(?, sp_task_id) WHERE key=?",
-                (due, title, category, now, sp_task_id, key))
+                " sp_task_id=COALESCE(?, sp_task_id),"
+                " source_sig=COALESCE(?, source_sig) WHERE key=?",
+                (due, title, category, now, sp_task_id, source_sig, key))
 
     # alerts ------------------------------------------------------------
     def sync_alerts(self, current: dict[tuple[str, str], str], now: str) -> list[tuple[str, str, str]]:
@@ -80,6 +86,10 @@ class Store:
                 self.db.execute("UPDATE alerts SET active=0 WHERE key=? AND condition=?",
                                 (row["key"], row["condition"]))
         return fresh
+
+    def active_alert_messages(self) -> list[str]:
+        return [r["message"] for r in self.db.execute(
+            "SELECT message FROM alerts WHERE active=1 ORDER BY first_seen")]
 
     def active_alerts(self) -> list[dict]:
         return [dict(r) for r in self.db.execute(

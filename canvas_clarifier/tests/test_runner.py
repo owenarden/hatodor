@@ -30,7 +30,7 @@ def assignment(aid, name, due_at, types, sub=None, created="2026-09-01T16:00:00Z
 def snapshot():
     return Snapshot(
         user_id=42,
-        courses=[{"id": c, "name": f"Course {c}"} for c in (1001, 1002, 1003, 1004)],
+        courses=[{"id": c, "name": f"Course {c}"} for c in (1001, 1002, 1003, 1004, 1005)],
         assignments={
             1002: [
                 assignment(1, "HOMEWORK - Reading - DUE: 10/6/2026 (Period 3) or 10/7/2026 (Period 2)",
@@ -150,6 +150,9 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("No longer in Canvas", alerts)
         # Paper work awaiting grading is not an alert.
         self.assertNotIn("Lab notes", alerts)
+        # Canvas courses the profile doesn't know are reported.
+        self.assertEqual(result["profile"]["canvas_courses_without_entry"], ["1005 Course 1005"])
+
         # First run records announcements silently; imports are dropped.
         self.assertEqual(result["notices"], [])
 
@@ -171,6 +174,28 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("Due date changed: History: HOMEWORK - Reading is now due Thu 10/8 11:20 AM",
                       result["new_alerts"])
         self.assertEqual(result["notices"], ["New announcement — English: Quiz moved"])
+
+    def test_profile_change_is_not_a_due_date_change(self):
+        self.run_once()
+        other = Profile.from_yaml(
+            (Path(__file__).resolve().parents[1] / "courses.example.yaml").read_text()
+            .replace("    period: 3\n", "    period: 2\n"))
+        result = run_once(snapshot(), other, self.opts, self.store,
+                          FakeSP(existing_tasks()), NOW)
+        by_key = {r["key"]: r for r in result["items"]}
+        self.assertEqual(by_key["canvas:assignment:1"]["due"], "2026-10-07T08:30-07:00")
+        self.assertFalse([a for a in result["new_alerts"] if a.startswith("Due date changed")])
+
+    def test_alerts_from_dry_run_are_sent_on_first_live_run(self):
+        dry = Options(dry_run=True, lookback_days=21, lookahead_days=35)
+        first = run_once(snapshot(), PROFILE, dry, self.store, FakeSP(existing_tasks()), NOW)
+        self.assertTrue(any("Extra Credit Poster" in a for a in first["new_alerts"]))
+        again = run_once(snapshot(), PROFILE, dry, self.store, FakeSP(existing_tasks()), NOW)
+        self.assertEqual(again["new_alerts"], [])
+        live, _ = self.run_once()
+        self.assertTrue(any("Extra Credit Poster" in a for a in live["new_alerts"]))
+        later, _ = self.run_once()
+        self.assertEqual(later["new_alerts"], [])
 
     def test_dry_run_writes_nothing(self):
         from clarifier.sp import SP
