@@ -1,0 +1,117 @@
+name: Publish App images
+
+# Builds each App's image and publishes it to GHCR so Home Assistant pulls a
+# ready image on install/update instead of building it on the device. Each
+# App's config.yaml names the image with `image:`; Supervisor substitutes
+# {arch} and pulls the tag equal to the App's `version`.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "canvas_clarifier/**"
+      - "hatodor_config_sync/**"
+      - "super_productivity_desktop/**"
+      - ".github/workflows/publish-images.yml"
+  # Pull requests build every image (including arm64) without publishing.
+  pull_request:
+    paths:
+      - "canvas_clarifier/**"
+      - "hatodor_config_sync/**"
+      - "super_productivity_desktop/**"
+      - ".github/workflows/publish-images.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { app: canvas_clarifier, name: canvas-clarifier, arch: amd64, platform: linux/amd64 }
+          - { app: canvas_clarifier, name: canvas-clarifier, arch: aarch64, platform: linux/arm64 }
+          - { app: hatodor_config_sync, name: config-sync, arch: amd64, platform: linux/amd64 }
+          - { app: hatodor_config_sync, name: config-sync, arch: aarch64, platform: linux/arm64 }
+          - { app: super_productivity_desktop, name: super-productivity-desktop, arch: amd64, platform: linux/amd64 }
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Work out image name and version
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version: *"\([^"]*\)"/\1/p' "${{ matrix.app }}/config.yaml")"
+          test -n "$version"
+          owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          image="ghcr.io/${owner}/${{ matrix.arch }}-hatodor-${{ matrix.name }}"
+          # The image line in config.yaml must match what this job publishes.
+          grep -Fq "image: \"ghcr.io/${owner}/{arch}-hatodor-${{ matrix.name }}\"" \
+            "${{ matrix.app }}/config.yaml"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip versions that are already published
+        id: exists
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          elif docker manifest inspect "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}" >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }} already exists; skipping"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up QEMU
+        if: steps.exists.outputs.published == 'false' && matrix.arch != 'amd64'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.exists.outputs.published == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: steps.exists.outputs.published == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.app }}
+          file: ./${{ matrix.app }}/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          build-args: |
+            BUILD_VERSION=${{ steps.meta.outputs.version }}
+            BUILD_ARCH=${{ matrix.arch }}
+
+      - name: Home Assistant can pull it anonymously
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          docker logout ghcr.io
+          if ! docker manifest inspect "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}" >/dev/null 2>&1; then
+            echo "::error::${{ steps.meta.outputs.image }} is not publicly pullable. On GitHub open Packages -> $(basename "${{ steps.meta.outputs.image }}") -> Package settings -> Change visibility -> Public, then re-run this workflow."
+            exit 1
+          fi
