@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.5
+
+- Tag each task in Super Productivity with its course, its Canvas category,
+  and how it is turned in (`Online` or `IRL`); tests and quizzes get
+  `In class`. Tag names are configurable under `tags:` in `courses.yaml`, and
+  a rule can override the submission kind (`submission: online`).
+- Super Productivity's API cannot create tags, so the App assigns tags that
+  already exist and logs the names it is waiting for. Tags added by hand are
+  kept.
+
 ## 0.1.4
 
 - Report an error when Super Productivity accepts a task but drops its

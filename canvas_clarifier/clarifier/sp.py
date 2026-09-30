@@ -57,6 +57,9 @@ class SP:
                 return p.get("id")
         return None
 
+    def tags(self) -> list[dict]:
+        return self._req("GET", "/tags") or []
+
     def tasks(self, project_id: str) -> list[dict]:
         """Active and archived tasks, done or not, in the project. Archived ones
         are marked with `_archived` (the API's source=all does not say which)."""

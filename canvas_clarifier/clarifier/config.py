@@ -19,6 +19,11 @@ OPTIONS_FILE = Path(os.environ.get("CLARIFIER_OPTIONS", "/data/options.json"))
 CONFIG_DIR = Path(os.environ.get("CLARIFIER_CONFIG_DIR", "/config"))
 EXAMPLE_PROFILE = Path(os.environ.get("CLARIFIER_EXAMPLE", "/app/courses.example.yaml"))
 
+# Super Productivity tags the App assigns. Set a name to "" (or course/kind to
+# false) in courses.yaml's `tags:` section to turn that tag off.
+DEFAULT_TAGS = {"course": True, "kind": True, "online": "Online", "in_person": "IRL",
+                "in_class": "In class"}
+
 VISIBLE = {"homework", "test", "prep", "project", "extra_credit", "unclassified"}
 HIDDEN = {"in_class", "gradebook", "ignore", "no_points"}
 
@@ -61,6 +66,7 @@ class Rule:
     completion: str | None = None
     due_from: str | None = None
     also_create: str | None = None
+    submission: str | None = None      # "online" or "in_person" override
 
     @classmethod
     def from_dict(cls, d: dict) -> "Rule":
@@ -71,7 +77,7 @@ class Rule:
             pat = re.compile(pat.replace("(?i)", ""), flags | re.IGNORECASE)
         return cls(category=d.get("category"), match=pat, when=d.get("when"),
                    completion=d.get("completion"), due_from=d.get("due_from"),
-                   also_create=d.get("also_create"))
+                   also_create=d.get("also_create"), submission=d.get("submission"))
 
 
 @dataclass
@@ -86,6 +92,7 @@ class Course:
     due_from: str | None = None
     rules: list[Rule] = field(default_factory=list)
     notes: str = ""
+    tag: str | None = None             # course tag name (default: short name)
 
 
 @dataclass
@@ -99,6 +106,7 @@ class Profile:
     drop_announcement_if: list[str] = field(default_factory=list)
     source: str = ""
     is_example: bool = False
+    tags: dict = field(default_factory=lambda: dict(DEFAULT_TAGS))
 
     @classmethod
     def from_yaml(cls, text: str) -> "Profile":
@@ -117,7 +125,7 @@ class Profile:
                 default_category=c.get("default_category"),
                 due_from=c.get("due_from"),
                 rules=[Rule.from_dict(r) for r in c.get("rules") or []],
-                notes=c.get("notes") or "")
+                notes=c.get("notes") or "", tag=c.get("tag"))
         ann = raw.get("announcements") or {}
         return cls(tz=tz,
                    schedule=Schedule.from_config(raw.get("schedule") or {}, tz),
@@ -125,7 +133,8 @@ class Profile:
                    global_rules=[Rule.from_dict(r) for r in raw.get("global_rules") or []],
                    courses=courses,
                    grace_days=int(student.get("grading_grace_days", 14)),
-                   drop_announcement_if=list(ann.get("drop_if") or []))
+                   drop_announcement_if=list(ann.get("drop_if") or []),
+                   tags=dict(DEFAULT_TAGS, **(raw.get("tags") or {})))
 
     @classmethod
     def load(cls, config_dir: Path = CONFIG_DIR) -> "Profile":
