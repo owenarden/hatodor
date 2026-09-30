@@ -94,3 +94,14 @@ version so Home Assistant offers the normal App update. Installing/updating the
 Config Sync App deploys the new files and reapplies the integration patch.
 Package or Python integration changes require a Home Assistant restart; ESPHome
 changes still require an Install/OTA to the device.
+
+## Prebuilt images
+
+`.github/workflows/publish-images.yml` builds every App on merge to `main` and
+publishes it to GitHub's container registry as
+`ghcr.io/owenarden/{arch}-hatodor-<app>:<version>`. Each App's `config.yaml`
+points at that image, so Home Assistant downloads it on install or update
+instead of building it on the device. After merging a version bump, wait for
+the workflow to finish before updating in Home Assistant. The packages must be
+public for Home Assistant to pull them; the workflow fails with instructions
+if one is not.

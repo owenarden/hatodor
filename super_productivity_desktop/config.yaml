@@ -11,6 +11,9 @@ boot: auto
 init: false
 stage: experimental
 backup: cold
+# Prebuilt by .github/workflows/publish-images.yml; Supervisor fills in {arch}
+# and pulls the tag matching `version`.
+image: "ghcr.io/owenarden/{arch}-hatodor-super-productivity-desktop"
 
 ports:
   5800/tcp: 5800
