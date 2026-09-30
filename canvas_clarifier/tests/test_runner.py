@@ -72,13 +72,22 @@ def snapshot():
     )
 
 
+TAGS = [{"id": "tg-hist", "title": "History"}, {"id": "tg-hw", "title": "home work/reading"},
+        {"id": "tg-irl", "title": "IRL"}, {"id": "tg-class", "title": "In class"},
+        {"id": "tg-mine", "title": "Mine"}]
+
+
 class FakeSP:
-    def __init__(self, tasks):
+    def __init__(self, tasks, tags=None):
         self._tasks = tasks
+        self._tags = TAGS if tags is None else tags
         self.created, self.updated, self.log = [], [], []
 
     def project_id(self, title):
         return "p1"
+
+    def tags(self):
+        return self._tags
 
     def tasks(self, project_id):
         return copy.deepcopy(self._tasks)
@@ -167,6 +176,38 @@ class RunnerTests(unittest.TestCase):
         # First run records announcements silently; imports are dropped.
         self.assertEqual(result["notices"], [])
 
+    def test_tags(self):
+        existing = existing_tasks() + [
+            {"id": "t1", "isDone": False, "notes": "clarifier:key=canvas:assignment:1",
+             "tagIds": ["tg-mine", "tg-class"]}]
+        result, sp = self.run_once(sp=FakeSP(existing))
+        by_key = {r["key"]: r for r in result["items"]}
+        # Course, Canvas category, and how it's turned in.
+        self.assertEqual(by_key["canvas:assignment:1"]["tags"],
+                         ["History", "Home Work/Reading", "IRL"])
+        # Existing task: our stale "In class" tag replaced, the user's own tag kept.
+        tags_t1 = next(f["tagIds"] for tid, f in sp.updated if tid == "t1")
+        self.assertEqual(tags_t1, ["tg-mine", "tg-hist", "tg-hw", "tg-irl"])
+        # Tests get "In class"; online work "Online".
+        self.assertIn("In class", by_key["canvas:assignment:7#test"]["tags"])
+        self.assertIn("Online", by_key["canvas:assignment:9"]["tags"])
+        # Tags that don't exist in SP are reported, not created.
+        self.assertIn("Online", result["missing_tags"])
+        self.assertIn("English", result["missing_tags"])
+        created = {c["title"]: c for c in sp.created}
+        self.assertNotIn("tg-irl", created["Science: Science fair project"].get("tagIds", []))
+
+    def test_submission_override(self):
+        profile = Profile.from_yaml(
+            (Path(__file__).resolve().parents[1] / "courses.example.yaml").read_text()
+            .replace("      - match: 'NB check|notebook'\n        category: prep",
+                     "      - match: 'NB check|notebook'\n        category: prep\n"
+                     "      - match: 'Lab notes'\n        category: homework\n"
+                     "        submission: online"))
+        result = run_once(snapshot(), profile, self.opts, self.store, FakeSP([]), NOW)
+        by_key = {r["key"]: r for r in result["items"]}
+        self.assertIn("Online", by_key["canvas:assignment:4"]["tags"])
+
     def test_alerts_fire_on_transitions_only(self):
         self.run_once()
         again, _ = self.run_once()
@@ -213,6 +254,7 @@ class RunnerTests(unittest.TestCase):
         sp = SP("http://127.0.0.1:9", dry_run=True)
         sp.project_id = lambda title: "p1"
         sp.tasks = lambda pid: []
+        sp.tags = lambda: []
         result = run_once(snapshot(), PROFILE, Options(dry_run=True), self.store, sp, NOW)
         self.assertTrue(any(c.startswith("create: History: HOMEWORK") for c in result["sp_changes"]))
 

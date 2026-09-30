@@ -100,6 +100,9 @@ def main() -> int:
             elif prof["canvas_courses_without_entry"]:
                 print("  Canvas courses missing from courses.yaml (default rules): "
                       + "; ".join(prof["canvas_courses_without_entry"]))
+            if result.get("missing_tags"):
+                print("  Create these tags in Super Productivity to have them applied: "
+                      + ", ".join(result["missing_tags"]))
             for line in result["sp_changes"]:
                 print(("  [dry run] " if opts.dry_run else "  ") + line)
             if result.get("notify"):

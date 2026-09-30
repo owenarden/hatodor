@@ -45,6 +45,21 @@ def sp_deadline(item: Item) -> dict:
     return {"deadlineWithTime": int(item.due.timestamp() * 1000)}
 
 
+def tag_names(item: Item, profile: Profile) -> list[str]:
+    """Names of the SP tags this task should carry."""
+    cfg = profile.tags
+    names = []
+    if cfg.get("course"):
+        names.append(item.course.tag or item.course.short)
+    if cfg.get("kind") and item.weight_group:
+        names.append(item.weight_group)
+    if item.category == "test":
+        names.append(cfg.get("in_class") or "")
+    elif item.submittable and item.submission:
+        names.append(cfg.get(item.submission) or "")
+    return [n for n in names if n]
+
+
 def in_window(item: Item, now: datetime, opts: Options) -> bool:
     if item.due is None:
         return item.visible and not item.canvas_done and item.submittable
@@ -81,6 +96,18 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
             errors.append(str(e))
             project_id = None
 
+    # Tags: SP's API can assign existing tags but not create them.
+    tag_ids: dict[str, str] = {}
+    if project_id:
+        try:
+            tag_ids = {(t.get("title") or "").strip().lower(): t["id"]
+                       for t in sp.tags() if t.get("id")}
+        except SPError as e:
+            errors.append(str(e))
+    wanted_names = {n for i in window for n in tag_names(i, profile)}
+    missing_tags = sorted(n for n in wanted_names if n.lower() not in tag_ids)
+    managed_ids = {tag_ids[n.lower()] for n in wanted_names if n.lower() in tag_ids}
+
     current: dict[tuple[str, str], str] = {}
     rows = []
     for item in sorted(window, key=lambda i: (i.due is None, i.due or now)):
@@ -92,7 +119,11 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
 
         if project_id:
             fields = {"title": sp_title(item), "notes": sp_notes(item), **sp_deadline(item)}
+            wanted_ids = [tag_ids[n.lower()] for n in tag_names(item, profile)
+                          if n.lower() in tag_ids]
             if task is None:
+                if wanted_ids:
+                    fields["tagIds"] = wanted_ids
                 wanted = (not item.canvas_done and not (past and not item.submittable)
                           and not (past and item.planner_done))
                 if wanted:
@@ -104,6 +135,12 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
                     action = "create"
             elif not task.get("_archived"):
                 changes = {k: v for k, v in fields.items() if task.get(k) != v}
+                # Keep tags someone added by hand; replace only the ones we manage.
+                have = list(task.get("tagIds") or [])
+                keep = [t for t in have if t not in managed_ids]
+                new_tags = keep + [t for t in wanted_ids if t not in keep]
+                if set(new_tags) != set(have):
+                    changes["tagIds"] = new_tags
                 if "deadlineWithTime" in changes and task.get("deadlineDay"):
                     changes["deadlineDay"] = None
                 if item.canvas_done and not task.get("isDone"):
@@ -143,6 +180,7 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
                           source_sig=item.source_sig)
         rows.append({"key": item.key, "course": item.course.short, "title": item.display,
                      "category": item.category, "weight": item.weight,
+                     "tags": tag_names(item, profile),
                      "weight_group": item.weight_group,
                      "due": _iso(item.due), "due_note": item.due_note,
                      "canvas": item.status, "planner_done": item.planner_done,
@@ -193,6 +231,7 @@ def run_once(snap: Snapshot, profile: Profile, opts: Options, store: Store, sp: 
         "profile": {"source": profile.source, "example": profile.is_example,
                     "courses": len(profile.courses), "canvas_courses_without_entry": unmatched},
         "errors": errors, "sp_project_found": bool(project_id),
+        "missing_tags": missing_tags if project_id else [],
         "sp_changes": sp.log if sp else [],
         "new_alerts": new_alerts, "notices": notices,
         "active_alerts": store.active_alerts(), "items": rows,

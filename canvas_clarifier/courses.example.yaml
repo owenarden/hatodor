@@ -49,6 +49,14 @@ global_rules:
   - match: 'extra credit'
     category: extra_credit
 
+tags:
+  # Super Productivity tags applied to each task (create them in SP once).
+  course: true          # the course's short name, or its `tag:`
+  kind: true            # the Canvas assignment category
+  online: Online        # turned in online
+  in_person: IRL        # turned in on paper / in person
+  in_class: In class    # tests and quizzes
+
 announcements:
   # Announcements imported from an earlier year's course are never posted and
   # predate the term; they are always dropped.

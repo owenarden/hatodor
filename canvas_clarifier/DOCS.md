@@ -60,6 +60,20 @@ student's period is read from text such as `DUE: 10/6 (Period 3) or 10/7
 (11:59pm) is shown as due at the start of that day's class, using the bell
 schedule. If the class doesn't meet that day, Canvas's deadline is kept.
 
+## Tags
+
+Each task is tagged with its course (the course's `short` name, or `tag:`),
+its Canvas assignment category, and how it is turned in: `Online` for Canvas
+or external-tool submissions, `IRL` for paper or in-person work. Tests and
+quizzes are tagged `In class` instead. Change the names, or turn a tag off,
+under `tags:` in `courses.yaml`; a rule's `submission: online` or
+`submission: in_person` overrides what Canvas reports.
+
+Super Productivity's API can assign tags but not create them, so create each
+tag once in Super Productivity. Until then the App logs `Create these tags in
+Super Productivity…` with the names it is waiting for. The App only changes
+the tags it manages; tags you add to a task yourself stay.
+
 ## Task notes
 
 The first line of each task's notes is the Canvas status (`Canvas: not

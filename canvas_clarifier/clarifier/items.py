@@ -44,6 +44,7 @@ class Item:
     # course weights its assignment groups.
     weight: float | None = None
     weight_group: str | None = None
+    submission: str | None = None      # "online" or "in_person"
     extra: dict = field(default_factory=dict)
 
     @property
@@ -206,9 +207,11 @@ def build_items(snap: Snapshot, profile: Profile, now: datetime) -> list[Item]:
     weighted = {c.get("id") for c in snap.courses if c.get("apply_assignment_group_weights")}
     items: list[Item] = []
     for cid, assignments in snap.assignments.items():
-        group_weight = {g.get("id"): (g.get("group_weight"), group_label(g.get("name")))
-                        for g in snap.groups.get(cid) or []
-                        if cid in weighted and (g.get("group_weight") or 0) > 0}
+        # group id -> (share of the grade if the course weights groups, label)
+        group_weight = {g.get("id"): (g.get("group_weight") if cid in weighted
+                                      and (g.get("group_weight") or 0) > 0 else None,
+                                      group_label(g.get("name")) or None)
+                        for g in snap.groups.get(cid) or []}
         course = profile.courses.get(cid)
         if course is None:
             name = next((c.get("name") for c in snap.courses if c.get("id") == cid), str(cid))
@@ -239,7 +242,9 @@ def build_items(snap: Snapshot, profile: Profile, now: datetime) -> list[Item]:
                 planner_done=a["id"] in planner_done,
                 submittable=category not in ("test",), source_sig=sig,
                 weight=(group_weight.get(a.get("assignment_group_id")) or (None, None))[0],
-                weight_group=(group_weight.get(a.get("assignment_group_id")) or (None, None))[1])
+                weight_group=(group_weight.get(a.get("assignment_group_id")) or (None, None))[1],
+                submission=(rule.submission if rule and rule.submission
+                            else "online" if types & ONLINE_TYPES else "in_person"))
             items.append(item)
             if category == "no_points":
                 rule = next((r for r in course.rules if r.also_create
